@@ -1,0 +1,11 @@
+openseespy
+o3seespy
+numpy
+sfsimodels
+PyQt5
+pyqtgraph
+bwplot
+
+# testing
+pytest
+
