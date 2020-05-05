@@ -6,6 +6,26 @@ import os
 import o3seespy as o3
 
 
+class bidict(dict):
+    def __init__(self, *args, **kwargs):
+        super(bidict, self).__init__(*args, **kwargs)
+        self.inverse = {}
+        for key, value in self.items():
+            self.inverse.setdefault(value,[]).append(key)
+
+    def __setitem__(self, key, value):
+        if key in self:
+            self.inverse[self[key]].remove(key)
+        super(bidict, self).__setitem__(key, value)
+        self.inverse.setdefault(value,[]).append(key)
+
+    def __delitem__(self, key):
+        self.inverse.setdefault(self[key],[]).remove(key)
+        if self[key] in self.inverse and not self.inverse[self[key]]:
+            del self.inverse[self[key]]
+        super(bidict, self).__delitem__(key)
+
+
 class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
     started = 0
 
@@ -27,27 +47,35 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         self.plotItem = self.addPlot(title="Nodes")
         self.node_points_plot = None
         self.ele_lines_plot = {}
-        self.ele_node_tags = {2: [], 3: [], 4: [], 8: [], 9: [], 20: []}
+        self.ele2node_tags = {2: [], 3: [], 4: [], 8: [], 9: [], 20: []}
         self.ele_x_coords = {}
         self.ele_y_coords = {}
         self.ele_connects = {}
+        self._mat2ele = bidict({})
 
-    def get_reverse_ele_node_tags(self):
-        return list(self.ele_node_tags)[::-1]
+    @property
+    def mat2ele(self):
+        return self._mat2ele
 
+    @mat2ele.setter
+    def mat2ele(self, m2e_dict):
+        self._mat2ele = bidict(m2e_dict)
 
-    def init_model(self, coords, ele_node_tags=None):
+    def get_reverse_ele2node_tags(self):
+        return list(self.ele2node_tags)[::-1]
+
+    def init_model(self, coords, ele2node_tags=None):
         self.x_coords = np.array(coords)[:, 0]
         self.y_coords = np.array(coords)[:, 1]
 
-        if ele_node_tags is not None:
+        if ele2node_tags is not None:
 
-            self.ele_node_tags = ele_node_tags
-            rnt = self.get_reverse_ele_node_tags()
+            self.ele2node_tags = ele2node_tags
+            rnt = self.get_reverse_ele2node_tags()
             for nl in rnt:
-                self.ele_node_tags[nl] = np.array(self.ele_node_tags[nl], dtype=int)
-                ele_x_coords = self.x_coords[self.ele_node_tags[nl] - 1]
-                ele_y_coords = self.y_coords[self.ele_node_tags[nl] - 1]
+                self.ele2node_tags[nl] = np.array(self.ele2node_tags[nl], dtype=int)
+                ele_x_coords = self.x_coords[self.ele2node_tags[nl] - 1]
+                ele_y_coords = self.y_coords[self.ele2node_tags[nl] - 1]
                 ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1)
                 ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1)
                 connect = np.ones_like(ele_x_coords, dtype=np.ubyte)
@@ -109,13 +137,13 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o', symbolBrush=blist)
         else:
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o')
-        for nl in self.ele_node_tags:
+        for nl in self.ele2node_tags:
             if nl == 2:
                 pen = 'b'
             else:
                 pen = 'w'
-            ele_x_coords = (self.x[self.i])[self.ele_node_tags[nl] - 1]
-            ele_y_coords = (self.y[self.i])[self.ele_node_tags[nl] - 1]
+            ele_x_coords = (self.x[self.i])[self.ele2node_tags[nl] - 1]
+            ele_y_coords = (self.y[self.i])[self.ele2node_tags[nl] - 1]
             ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
             ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
             self.ele_lines_plot[nl].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[nl])
@@ -188,85 +216,85 @@ def plot_finite_element_mesh(win, femesh):
             r.setBrush(pg.mkBrush(cbox(ci, as255=True, alpha=80)))
             win.addItem(r)
 
-
-class O3Results(object):
-    cache_path = ''
-    coords = None
-    ele_node_tags = None
-    x_disp = None
-    y_disp = None
-    node_c = None
-    dynamic = True
-    used_r_starter = 0
-
-    def start_recorders(self, osi):
-        self.used_r_starter = 1
-        self.coords = o3.get_all_node_coords(osi)
-        self.ele_node_tags = o3.get_all_ele_node_tags_as_dict(osi)
-        if self.dynamic:
-            o3.recorder.NodesToFile(osi, self.cache_path + 'x_disp.txt', 'all', [o3.cc.DOF2D_X], 'disp', nsd=4)
-            o3.recorder.NodesToFile(osi, self.cache_path + 'y_disp.txt', 'all', [o3.cc.DOF2D_Y], 'disp', nsd=4)
-
-    def wipe_old_files(self):
-        for node_len in [2, 4, 8]:
-            ffp = self.cache_path + f'ele_node_tags_{node_len}.txt'
-            if os.path.exists(ffp):
-                os.remove(ffp)
-        if not self.used_r_starter:
-            try:
-                os.remove(self.cache_path + 'x_disp.txt')
-            except FileNotFoundError:
-                pass
-            try:
-                os.remove(self.cache_path + 'y_disp.txt')
-            except FileNotFoundError:
-                pass
-        try:
-            os.remove(self.cache_path + 'node_c.txt')
-        except FileNotFoundError:
-            pass
-
-    def save_to_cache(self):
-        self.wipe_old_files()
-        np.savetxt(self.cache_path + 'coords.txt', self.coords)
-        for node_len in self.ele_node_tags:
-            np.savetxt(self.cache_path + f'ele_node_tags_{node_len}.txt', self.ele_node_tags[node_len], fmt='%i')
-        if self.dynamic:
-            if not self.used_r_starter:
-                np.savetxt(self.cache_path + 'x_disp.txt', self.x_disp)
-                np.savetxt(self.cache_path + 'y_disp.txt', self.y_disp)
-            if self.node_c is not None:
-                np.savetxt(self.cache_path + 'node_c.txt', self.node_c)
-
-    def load_from_cache(self):
-        self.coords = np.loadtxt(self.cache_path + 'coords.txt')
-        self.ele_node_tags = {}
-        for node_len in [2, 4, 8]:
-            try:
-                self.ele_node_tags[node_len] = np.loadtxt(self.cache_path + f'ele_node_tags_{node_len}.txt', ndmin=2)
-            except OSError:
-                continue
-
-        if self.dynamic:
-            self.x_disp = np.loadtxt(self.cache_path + 'x_disp.txt')
-            self.y_disp = np.loadtxt(self.cache_path + 'y_disp.txt')
-            try:
-                self.node_c = np.loadtxt(self.cache_path + 'node_c.txt')
-                if len(self.node_c) == 0:
-                    self.node_c = None
-            except OSError:
-                pass
+#
+# class O3Results(object):
+#     cache_path = ''
+#     coords = None
+#     ele2node_tags = None
+#     x_disp = None
+#     y_disp = None
+#     node_c = None
+#     dynamic = True
+#     used_r_starter = 0
+#
+#     def start_recorders(self, osi):
+#         self.used_r_starter = 1
+#         self.coords = o3.get_all_node_coords(osi)
+#         self.ele2node_tags = o3.get_all_ele2node_tags_as_dict(osi)
+#         if self.dynamic:
+#             o3.recorder.NodesToFile(osi, self.cache_path + 'x_disp.txt', 'all', [o3.cc.DOF2D_X], 'disp', nsd=4)
+#             o3.recorder.NodesToFile(osi, self.cache_path + 'y_disp.txt', 'all', [o3.cc.DOF2D_Y], 'disp', nsd=4)
+#
+#     def wipe_old_files(self):
+#         for node_len in [2, 4, 8]:
+#             ffp = self.cache_path + f'ele2node_tags_{node_len}.txt'
+#             if os.path.exists(ffp):
+#                 os.remove(ffp)
+#         if not self.used_r_starter:
+#             try:
+#                 os.remove(self.cache_path + 'x_disp.txt')
+#             except FileNotFoundError:
+#                 pass
+#             try:
+#                 os.remove(self.cache_path + 'y_disp.txt')
+#             except FileNotFoundError:
+#                 pass
+#         try:
+#             os.remove(self.cache_path + 'node_c.txt')
+#         except FileNotFoundError:
+#             pass
+#
+#     def save_to_cache(self):
+#         self.wipe_old_files()
+#         np.savetxt(self.cache_path + 'coords.txt', self.coords)
+#         for node_len in self.ele2node_tags:
+#             np.savetxt(self.cache_path + f'ele2node_tags_{node_len}.txt', self.ele2node_tags[node_len], fmt='%i')
+#         if self.dynamic:
+#             if not self.used_r_starter:
+#                 np.savetxt(self.cache_path + 'x_disp.txt', self.x_disp)
+#                 np.savetxt(self.cache_path + 'y_disp.txt', self.y_disp)
+#             if self.node_c is not None:
+#                 np.savetxt(self.cache_path + 'node_c.txt', self.node_c)
+#
+#     def load_from_cache(self):
+#         self.coords = np.loadtxt(self.cache_path + 'coords.txt')
+#         self.ele2node_tags = {}
+#         for node_len in [2, 4, 8]:
+#             try:
+#                 self.ele2node_tags[node_len] = np.loadtxt(self.cache_path + f'ele2node_tags_{node_len}.txt', ndmin=2)
+#             except OSError:
+#                 continue
+#
+#         if self.dynamic:
+#             self.x_disp = np.loadtxt(self.cache_path + 'x_disp.txt')
+#             self.y_disp = np.loadtxt(self.cache_path + 'y_disp.txt')
+#             try:
+#                 self.node_c = np.loadtxt(self.cache_path + 'node_c.txt')
+#                 if len(self.node_c) == 0:
+#                     self.node_c = None
+#             except OSError:
+#                 pass
 
 
 def replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
-    o3res = O3Results()
+    o3res = o3.results.Results2D()
     o3res.dynamic = dynamic
     o3res.cache_path = out_folder
     o3res.load_from_cache()
 
     win = Window()
     win.resize(800, 600)
-    win.init_model(o3res.coords, o3res.ele_node_tags)
+    win.init_model(o3res.coords, o3res.ele2node_tags)
     if dynamic:
         win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
     win.start()
