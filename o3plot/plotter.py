@@ -47,8 +47,8 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         self.plotItem = self.addPlot(title="Nodes")
         self.node_points_plot = None
         self.ele_lines_plot = {}
-        self.ele2node_tags = {2: [], 3: [], 4: [], 8: [], 9: [], 20: []}
-        self.all_ele2node_tags = {}
+        self.ele2node_tags = {}
+        self.mat2node_tags = {}
         self.ele_x_coords = {}
         self.ele_y_coords = {}
         self.ele_connects = {}
@@ -76,18 +76,19 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
 
         if ele2node_tags is not None:
             self.ele2node_tags = ele2node_tags
-            for nl in ele2node_tags:
-                for ele in ele2node_tags[nl]:
-                    self.all_ele2node_tags[ele] = ele2node_tags[nl][ele]
             self.mat2node_tags = {}
-            rnt = self.get_reverse_ele2node_tags()
 
-            if not len(self.mat2ele):
-                for nl in rnt:
-                    self.mat2ele[f'{nl}-all'] = list(self.ele2node_tags[nl])
+            if not len(self.mat2ele):  # then arrange by node len
+                for ele in self.ele2node_tags:
+                    n = len(self.ele2node_tags[ele]) - 1
+                    if n not in self.mat2ele:
+                        self.mat2ele[f'{n}-all'] = []
+                    self.mat2ele[f'{n}-all'] = self.ele2node_tags[ele][1:]
+
             for i, mat in enumerate(self.mat2ele):
                 eles = self.mat2ele[mat]
-                self.mat2node_tags[mat] = np.array([self.all_ele2node_tags[ele] for ele in eles], dtype=int)
+                # TODO: handle when mats assigned to eles of different node lens - not common by can be 8-node and 4-n
+                self.mat2node_tags[mat] = np.array([self.ele2node_tags[ele] for ele in eles], dtype=int)
                 ele_x_coords = self.x_coords[self.mat2node_tags[mat] - 1]
                 ele_y_coords = self.y_coords[self.mat2node_tags[mat] - 1]
                 ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1)
@@ -97,7 +98,7 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
                 ele_x_coords = ele_x_coords.flatten()
                 ele_y_coords = ele_y_coords.flatten()
                 self.ele_connects[mat] = connect.flatten()
-                nl = len(self.all_ele2node_tags[eles[0]])
+                nl = len(self.ele2node_tags[eles[0]])
                 if nl == 2:
                     pen = 'b'
                 else:
@@ -156,7 +157,7 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         else:
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o')
         for i, mat in enumerate(self.mat2node_tags):
-            nl = 3
+            nl = len(self.ele2node_tags[self.mat2ele[mat][0]])
             if nl == 2:
                 pen = 'b'
             else:
@@ -166,8 +167,8 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
             ele_y_coords = (self.y[self.i])[self.mat2node_tags[mat] - 1]
             ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
             ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
-            self.ele_lines_plot[mat].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[mat], fillLevel='enclosed',
-                                                             fillBrush=brush)
+            self.ele_lines_plot[mat].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[mat],
+                                             fillLevel='enclosed', fillBrush=brush)
         self.plotItem.setTitle(f"Nodes time: {self.time[self.i]:.4g}s")
 
     def stop(self):
