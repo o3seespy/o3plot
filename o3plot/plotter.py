@@ -48,18 +48,24 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         self.node_points_plot = None
         self.ele_lines_plot = {}
         self.ele2node_tags = {2: [], 3: [], 4: [], 8: [], 9: [], 20: []}
+        self.all_ele2node_tags = {}
         self.ele_x_coords = {}
         self.ele_y_coords = {}
         self.ele_connects = {}
-        self._mat2ele = bidict({})
+        # self._mat2ele = bidict({})
+        self._mat2ele = {}
 
     @property
     def mat2ele(self):
         return self._mat2ele
 
     @mat2ele.setter
-    def mat2ele(self, m2e_dict):
-        self._mat2ele = bidict(m2e_dict)
+    def mat2ele(self, m2e_list):
+        # self._mat2ele = bidict(m2e_dict)
+        for line in m2e_list:
+            if line[0] not in self._mat2ele:
+                self._mat2ele[line[0]] = []
+            self._mat2ele[line[0]].append(line[1])
 
     def get_reverse_ele2node_tags(self):
         return list(self.ele2node_tags)[::-1]
@@ -69,28 +75,37 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         self.y_coords = np.array(coords)[:, 1]
 
         if ele2node_tags is not None:
-
             self.ele2node_tags = ele2node_tags
+            for nl in ele2node_tags:
+                for ele in ele2node_tags[nl]:
+                    self.all_ele2node_tags[ele] = ele2node_tags[nl][ele]
+            self.mat2node_tags = {}
             rnt = self.get_reverse_ele2node_tags()
-            for nl in rnt:
-                self.ele2node_tags[nl] = np.array(self.ele2node_tags[nl], dtype=int)
-                ele_x_coords = self.x_coords[self.ele2node_tags[nl] - 1]
-                ele_y_coords = self.y_coords[self.ele2node_tags[nl] - 1]
+
+            if not len(self.mat2ele):
+                for nl in rnt:
+                    self.mat2ele[f'{nl}-all'] = list(self.ele2node_tags[nl])
+            for i, mat in enumerate(self.mat2ele):
+                eles = self.mat2ele[mat]
+                self.mat2node_tags[mat] = np.array([self.all_ele2node_tags[ele] for ele in eles], dtype=int)
+                ele_x_coords = self.x_coords[self.mat2node_tags[mat] - 1]
+                ele_y_coords = self.y_coords[self.mat2node_tags[mat] - 1]
                 ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1)
                 ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1)
                 connect = np.ones_like(ele_x_coords, dtype=np.ubyte)
                 connect[:, -1] = 0
-                self.ele_x_coords = ele_x_coords.flatten()
-                self.ele_y_coords = ele_y_coords.flatten()
-                self.ele_connects[nl] = connect.flatten()
+                ele_x_coords = ele_x_coords.flatten()
+                ele_y_coords = ele_y_coords.flatten()
+                self.ele_connects[mat] = connect.flatten()
+                nl = len(self.all_ele2node_tags[eles[0]])
                 if nl == 2:
                     pen = 'b'
                 else:
                     pen = 'w'
-                brush = pg.mkBrush(cbox(0, as255=True, alpha=80))
-                self.ele_lines_plot[nl] = self.plotItem.plot(self.ele_x_coords, self.ele_y_coords, pen=pen,
-                                                             connect=self.ele_connects[nl], fillLevel='enclosed',
-                                                             fillBrush=brush)
+                brush = pg.mkBrush(cbox(i, as255=True, alpha=80))
+                self.ele_lines_plot[mat] = self.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
+                                                         connect=self.ele_connects[mat], fillLevel='enclosed',
+                                                         fillBrush=brush)
 
         self.node_points_plot = self.plotItem.plot([], pen=None,
                                                    symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None)
@@ -140,17 +155,18 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o', symbolBrush=blist)
         else:
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o')
-        for nl in self.ele2node_tags:
+        for i, mat in enumerate(self.mat2node_tags):
+            nl = 3
             if nl == 2:
                 pen = 'b'
             else:
                 pen = 'w'
-            brush = pg.mkBrush(cbox(0, as255=True, alpha=80))
-            ele_x_coords = (self.x[self.i])[self.ele2node_tags[nl] - 1]
-            ele_y_coords = (self.y[self.i])[self.ele2node_tags[nl] - 1]
+            brush = pg.mkBrush(cbox(i, as255=True, alpha=80))
+            ele_x_coords = self.x[self.i][self.mat2node_tags[mat] - 1]
+            ele_y_coords = (self.y[self.i])[self.mat2node_tags[mat] - 1]
             ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
             ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
-            self.ele_lines_plot[nl].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[nl], fillLevel='enclosed',
+            self.ele_lines_plot[mat].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[mat], fillLevel='enclosed',
                                                              fillBrush=brush)
         self.plotItem.setTitle(f"Nodes time: {self.time[self.i]:.4g}s")
 
@@ -299,7 +315,9 @@ def replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
 
     win = Window()
     win.resize(800, 600)
+    win.mat2ele = o3res.mat2ele_tags
     win.init_model(o3res.coords, o3res.ele2node_tags)
+
     if dynamic:
         win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
     win.start()
