@@ -87,7 +87,10 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
                     pen = 'b'
                 else:
                     pen = 'w'
-                self.ele_lines_plot[nl] = self.plotItem.plot(self.ele_x_coords, self.ele_y_coords, pen=pen, connect=self.ele_connects[nl])
+                brush = pg.mkBrush(cbox(0, as255=True, alpha=80))
+                self.ele_lines_plot[nl] = self.plotItem.plot(self.ele_x_coords, self.ele_y_coords, pen=pen,
+                                                             connect=self.ele_connects[nl], fillLevel='enclosed',
+                                                             fillBrush=brush)
 
         self.node_points_plot = self.plotItem.plot([], pen=None,
                                                    symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None)
@@ -142,11 +145,13 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
                 pen = 'b'
             else:
                 pen = 'w'
+            brush = pg.mkBrush(cbox(0, as255=True, alpha=80))
             ele_x_coords = (self.x[self.i])[self.ele2node_tags[nl] - 1]
             ele_y_coords = (self.y[self.i])[self.ele2node_tags[nl] - 1]
             ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
             ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
-            self.ele_lines_plot[nl].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[nl])
+            self.ele_lines_plot[nl].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[nl], fillLevel='enclosed',
+                                                             fillBrush=brush)
         self.plotItem.setTitle(f"Nodes time: {self.time[self.i]:.4g}s")
 
     def stop(self):
