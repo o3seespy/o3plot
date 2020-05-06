@@ -324,6 +324,19 @@ def replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
     win.start()
 
 
+def replot(o3res, xmag=1, ymag=1, t_scale=1):
+    o3res.load_from_cache()
+
+    win = Window()
+    win.resize(800, 600)
+    win.mat2ele = o3res.mat2ele_tags
+    win.init_model(o3res.coords, o3res.ele2node_tags)
+
+    if o3res.dynamic:
+        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
+    win.start()
+
+
 # if __name__ == '__main__':
 #
 #     app = QtWidgets.QApplication([])
