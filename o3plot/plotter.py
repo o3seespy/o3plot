@@ -93,9 +93,25 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
             new_tags += subtags
             if not len(new_tags):
                 empty_eles.append(ele)
-            self.ele2node_tags[ele] = new_tags
+            self.ele2node_tags[ele] = self.reorder_node_tags_in_clockwise_direction(new_tags)
         for ele in empty_eles:
             del self.ele2node_tags[ele]  # TODO: remove eles from mat2eles
+
+
+    def reorder_node_tags_in_clockwise_direction(self, node_tags):
+        node_tags = np.array(node_tags, dtype=int)
+        x = self.x_coords[node_tags - 1]
+        y = self.y_coords[node_tags - 1]
+        xc = np.mean(x)
+        yc = np.mean(y)
+        # angle = np.arctan((y - yc) / (x - xc))
+        angle = np.arctan2((y - yc), (x - xc))
+        inds = np.argsort(angle)
+        return np.array(node_tags)[inds[::-1]]
+
+        # find x-min, y-min - pop
+        # find x-max, y-max - pop
+        # find x-max,
 
     def get_reverse_ele2node_tags(self):
         return list(self.ele2node_tags)[::-1]
