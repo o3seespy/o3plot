@@ -61,6 +61,7 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
 
     @mat2ele.setter
     def mat2ele(self, m2e_list):
+        
         # self._mat2ele = bidict(m2e_dict)
         for line in m2e_list:
             if line[0] not in self._mat2ele:
@@ -81,11 +82,12 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
             if not len(self.mat2ele):  # then arrange by node len
                 for ele in self.ele2node_tags:
                     n = len(self.ele2node_tags[ele]) - 1
-                    if n not in self.mat2ele:
+                    if f'{n}-all' not in self.mat2ele:
                         self.mat2ele[f'{n}-all'] = []
-                    self.mat2ele[f'{n}-all'] = self.ele2node_tags[ele][1:]
+                    self.mat2ele[f'{n}-all'].append(ele)
 
             for i, mat in enumerate(self.mat2ele):
+                self.mat2ele[mat] = np.array(self.mat2ele[mat], dtype=int)
                 eles = self.mat2ele[mat]
                 # TODO: handle when mats assigned to eles of different node lens - not common by can be 8-node and 4-n
                 self.mat2node_tags[mat] = np.array([self.ele2node_tags[ele] for ele in eles], dtype=int)
@@ -329,7 +331,8 @@ def replot(o3res, xmag=1, ymag=1, t_scale=1):
 
     win = Window()
     win.resize(800, 600)
-    win.mat2ele = o3res.mat2ele_tags
+    if o3res.mat2ele_tags is not None:
+        win.mat2ele = o3res.mat2ele_tags
     win.init_model(o3res.coords, o3res.ele2node_tags)
 
     if o3res.dynamic:
