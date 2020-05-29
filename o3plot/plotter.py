@@ -69,20 +69,33 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
                 self._mat2ele[line[0]] = []
             self._mat2ele[line[0]].append(line[1])
 
-    def renumber_nodes_and_eles(self):  # if selected nodes used
+    def renumber_nodes_and_eles(self, invert=1):  # if selected nodes used
+        invert_flag = 0
         empty_eles = []
         for ele in self.ele2node_tags:
             new_tags = []
+            subtags = []  # allows the tag numbers to be switched if nodes are removed
             for tag in self.ele2node_tags[ele]:
                 try:
-                    new_tags.append(np.where(tag == self.selected_nodes)[0][0] + 1)
+                    subtags.append(np.where(tag == self.selected_nodes)[0][0] + 1)
                 except IndexError:
+                    if not len(subtags):
+                        continue
+                    if invert_flag:
+                        subtags = subtags[::-1]
+                    new_tags += subtags
+                    subtags = []
+                    if invert and not invert_flag:
+                        invert_flag = 1
+                    else:
+                        invert_flag = 0
                     continue
+            new_tags += subtags
             if not len(new_tags):
                 empty_eles.append(ele)
             self.ele2node_tags[ele] = new_tags
         for ele in empty_eles:
-            del self.ele2node_tags[ele]
+            del self.ele2node_tags[ele]  # TODO: remove eles from mat2eles
 
     def get_reverse_ele2node_tags(self):
         return list(self.ele2node_tags)[::-1]
