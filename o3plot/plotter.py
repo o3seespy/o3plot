@@ -28,6 +28,7 @@ class bidict(dict):
 
 class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
     started = 0
+    selected_nodes = None
 
     def __init__(self, parent=None):
         self.app = QtWidgets.QApplication([])
@@ -68,6 +69,21 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
                 self._mat2ele[line[0]] = []
             self._mat2ele[line[0]].append(line[1])
 
+    def renumber_nodes_and_eles(self):  # if selected nodes used
+        empty_eles = []
+        for ele in self.ele2node_tags:
+            new_tags = []
+            for tag in self.ele2node_tags[ele]:
+                try:
+                    new_tags.append(np.where(tag == self.selected_nodes)[0][0] + 1)
+                except IndexError:
+                    continue
+            if not len(new_tags):
+                empty_eles.append(ele)
+            self.ele2node_tags[ele] = new_tags
+        for ele in empty_eles:
+            del self.ele2node_tags[ele]
+
     def get_reverse_ele2node_tags(self):
         return list(self.ele2node_tags)[::-1]
 
@@ -78,6 +94,8 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         if ele2node_tags is not None:
             self.ele2node_tags = ele2node_tags
             self.mat2node_tags = {}
+            if self.selected_nodes is not None:
+                self.renumber_nodes_and_eles()
 
             if not len(self.mat2ele):  # then arrange by node len
                 for ele in self.ele2node_tags:
