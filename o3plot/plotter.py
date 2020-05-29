@@ -69,49 +69,39 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
                 self._mat2ele[line[0]] = []
             self._mat2ele[line[0]].append(line[1])
 
-    def renumber_nodes_and_eles(self, invert=1):  # if selected nodes used
-        invert_flag = 0
+    def renumber_nodes_and_eles(self):  # if selected nodes used
         empty_eles = []
+        ele_node_strs = []
         for ele in self.ele2node_tags:
             new_tags = []
-            subtags = []  # allows the tag numbers to be switched if nodes are removed
             for tag in self.ele2node_tags[ele]:
                 try:
-                    subtags.append(np.where(tag == self.selected_nodes)[0][0] + 1)
+                    new_tags.append(np.where(tag == self.selected_nodes)[0][0] + 1)
                 except IndexError:
-                    if not len(subtags):
-                        continue
-                    if invert_flag:
-                        subtags = subtags[::-1]
-                    new_tags += subtags
-                    subtags = []
-                    if invert and not invert_flag:
-                        invert_flag = 1
-                    else:
-                        invert_flag = 0
                     continue
-            new_tags += subtags
+            self.ele2node_tags[ele] = self.reorder_node_tags_in_anticlockwise_direction(new_tags)
+            # remove if empty
             if not len(new_tags):
                 empty_eles.append(ele)
-            self.ele2node_tags[ele] = self.reorder_node_tags_in_clockwise_direction(new_tags)
+                continue
+            # remove if already in
+            ele_node_str = ' '.join(np.array(self.ele2node_tags[ele], dtype=str))
+            if ele_node_str not in ele_node_strs:
+                ele_node_strs.append(ele_node_str)
+            else:
+                empty_eles.append(ele)
         for ele in empty_eles:
             del self.ele2node_tags[ele]  # TODO: remove eles from mat2eles
 
-
-    def reorder_node_tags_in_clockwise_direction(self, node_tags):
+    def reorder_node_tags_in_anticlockwise_direction(self, node_tags):
         node_tags = np.array(node_tags, dtype=int)
         x = self.x_coords[node_tags - 1]
         y = self.y_coords[node_tags - 1]
         xc = np.mean(x)
         yc = np.mean(y)
-        # angle = np.arctan((y - yc) / (x - xc))
         angle = np.arctan2((y - yc), (x - xc))
         inds = np.argsort(angle)
         return np.array(node_tags)[inds[::-1]]
-
-        # find x-min, y-min - pop
-        # find x-max, y-max - pop
-        # find x-max,
 
     def get_reverse_ele2node_tags(self):
         return list(self.ele2node_tags)[::-1]
