@@ -237,10 +237,10 @@ def plot_two_d_system(win, tds):
             x1 = tds.x_sps[i + 1]
         xs = np.array([x0, x1])
         win.plot(tds.x_surf, tds.y_surf, pen='w')
-        x_angles = [10] + list(tds.sps[i].x_angles)
+        x_angles = [0] + list(tds.sps[i].x_angles)
         sp = tds.sps[i]
         for ll in range(2, sp.n_layers + 1):
-            ys = y_sps_surf[i] - sp.layer_depth(ll) + x_angles[ll - 1] * xs
+            ys = y_sps_surf[i] - sp.layer_depth(ll) + x_angles[ll - 1] * (xs - x0)
             win.plot(xs, ys, pen='w')
     win.plot([0, 0], [-tds.height, tds.y_surf[0]], pen='w')
     win.plot([tds.width, tds.width], [-tds.height, tds.y_surf[-1]], pen='w')
@@ -255,27 +255,54 @@ def plot_two_d_system(win, tds):
         win.plot(x, y, pen='r')
 
 
-
 def plot_finite_element_mesh(win, femesh):
-    for i in range(len(femesh.y_nodes)):
-        win.addItem(pg.InfiniteLine(femesh.y_nodes[i], angle=0, pen=(0, 255, 255, 30)))
-    for i in range(len(femesh.x_nodes)):
-        win.addItem(pg.InfiniteLine(femesh.x_nodes[i], angle=90, pen=(0, 255, 255, 30)))
+    """
+    Plots a finite element mesh object
 
+    :param win:
+    :param femesh:
+    :return:
+    """
+    x_all = femesh.x_nodes
+    y_all = femesh.y_nodes
+    x_inds = []
+    y_inds = []
+    if hasattr(y_all[0], '__len__'):  # can either have varying y-coordinates or single set
+        n_y = len(y_all[0])
+    else:
+        n_y = 0
+    ed = {}
     for xx in range(len(femesh.soil_grid)):
-        pid = femesh.profile_indys[xx]
-        for yy in range(len(femesh.soil_grid[0])):
+        x_ele = [xx, xx + 1, xx + 1, xx, xx]
+        x_inds += x_ele * (n_y - 1)
+        for yy in range(len(femesh.soil_grid[xx])):
             sl_ind = femesh.soil_grid[xx][yy]
             if sl_ind > 1000:
-                continue
+                sl_ind = -1
+            if sl_ind not in ed:
+                ed[sl_ind] = [[], []]
 
-            r = pg.QtGui.QGraphicsRectItem(femesh.x_nodes[xx], femesh.y_nodes[yy],
-                                           femesh.x_nodes[xx + 1] - femesh.x_nodes[xx],
-                                           femesh.y_nodes[yy + 1] - femesh.y_nodes[yy])
-            r.setPen(pg.mkPen(None))
-            ci = sl_ind
-            r.setBrush(pg.mkBrush(cbox(ci, as255=True, alpha=80)))
-            win.addItem(r)
+            y_ele = [yy + xx * n_y, yy + (xx + 1) * n_y, yy + 1 + (xx + 1) * n_y, yy + 1 + xx * n_y, yy + xx * n_y]
+            ed[sl_ind][0] += x_ele
+            ed[sl_ind][1] += y_ele
+            y_inds += y_ele
+
+    yc = y_all.flatten()
+    for sl_ind in ed:
+        ed[sl_ind][0] = np.array(ed[sl_ind][0])
+        ed[sl_ind][1] = np.array(ed[sl_ind][1])
+        if sl_ind < 0:
+            pen = pg.mkPen([200, 200, 200, 10])
+            brush = pg.mkBrush([255, 255, 255, 20])
+        else:
+            pen = 'k'
+            brush = pg.mkBrush(cbox(sl_ind, as255=True, alpha=90))
+        ele_x_coords = x_all[ed[sl_ind][0]]
+        ele_y_coords = yc[ed[sl_ind][1]]
+        ele_connects = np.array([1, 1, 1, 1, 0] * int(len(ed[sl_ind][0]) / 5))
+        win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
+                                                  connect=ele_connects, fillLevel='enclosed',
+                                                  fillBrush=brush)
 
 #
 # class O3Results(object):
@@ -362,8 +389,20 @@ def replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
         win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
     win.start()
 
+def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1):
+
+    win = Window()
+    win.resize(800, 600)
+    if o3res.mat2ele_tags is not None:
+        win.mat2ele = o3res.mat2ele_tags
+    win.init_model(o3res.coords, o3res.ele2node_tags)
+
+    if o3res.dynamic:
+        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
+    win.start()
 
 def replot(o3res, xmag=1, ymag=1, t_scale=1):
+    # if o3res.coords is None:
     o3res.load_from_cache()
 
     win = Window()
