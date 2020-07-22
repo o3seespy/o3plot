@@ -3,7 +3,6 @@ import pyqtgraph as pg
 import numpy as np
 from bwplot import cbox, colors
 import os
-import o3seespy as o3
 
 
 class bidict(dict):
@@ -295,7 +294,7 @@ def plot_finite_element_mesh(win, femesh):
             pen = pg.mkPen([200, 200, 200, 10])
             brush = pg.mkBrush([255, 255, 255, 20])
         else:
-            pen = 'k'
+            pen = pg.mkPen([200, 200, 200, 80])
             brush = pg.mkBrush(cbox(sl_ind, as255=True, alpha=90))
         ele_x_coords = x_all[ed[sl_ind][0]]
         ele_y_coords = yc[ed[sl_ind][1]]
@@ -375,6 +374,7 @@ def plot_finite_element_mesh(win, femesh):
 
 
 def replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
+    import o3seespy as o3
     o3res = o3.results.Results2D()
     o3res.dynamic = dynamic
     o3res.cache_path = out_folder
