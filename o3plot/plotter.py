@@ -158,10 +158,11 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
             self.raise_()
             self.app.exec_()
 
-    def plot(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, t_scale=1):
+    def plot(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
         self.timer.setInterval(1000. * dt * t_scale)  # in milliseconds
         self.timer.start()
         self.node_c = node_c
+        self.ele_c = ele_c
         self.x = np.array(x) * xmag
         self.y = np.array(y) * ymag
         if self.x_coords is not None:
@@ -173,13 +174,23 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         # Prepare node colors
         if self.node_c is not None:
             ncol = colors.get_len_red_to_yellow()
-            self.brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ncol)]
+            self.node_brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ncol)]
 
             y_max = np.max(self.node_c)
             y_min = np.min(self.node_c)
             inc = (y_max - y_min) * 0.001
-            bis = (self.node_c - y_min) / (y_max + inc - y_min) * ncol
-            self.bis = np.array(bis, dtype=int)
+            node_bis = (self.node_c - y_min) / (y_max + inc - y_min) * ncol
+            self.node_bis = np.array(node_bis, dtype=int)
+
+        if self.ele_c is not None:
+            ecol = colors.get_len_red_to_yellow()
+            self.ele_brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ecol)]
+
+            y_max = np.max(self.ele_c)
+            y_min = np.min(self.ele_c)
+            inc = (y_max - y_min) * 0.001
+            ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
+            self.ele_bis = np.array(ele_bis, dtype=int)
 
         self.timer.timeout.connect(self.updater)
 
@@ -189,7 +200,7 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
             self.timer.stop()
 
         if self.node_c is not None:
-            blist = np.array(self.brush_list)[self.bis[self.i]]
+            blist = np.array(self.node_brush_list)[self.node_bis[self.i]]
             # TODO: try using ScatterPlotWidget and colorMap
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o', symbolBrush=blist)
         else:
@@ -254,7 +265,7 @@ def plot_two_d_system(win, tds):
         win.plot(x, y, pen='r')
 
 
-def plot_finite_element_mesh(win, femesh):
+def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
     """
     Plots a finite element mesh object
 
@@ -271,6 +282,7 @@ def plot_finite_element_mesh(win, femesh):
     else:
         n_y = 0
     ed = {}
+    cd = {}
     for xx in range(len(femesh.soil_grid)):
         x_ele = [xx, xx + 1, xx + 1, xx, xx]
         x_inds += x_ele * (n_y - 1)
@@ -284,7 +296,23 @@ def plot_finite_element_mesh(win, femesh):
             y_ele = [yy + xx * n_y, yy + (xx + 1) * n_y, yy + 1 + (xx + 1) * n_y, yy + 1 + xx * n_y, yy + xx * n_y]
             ed[sl_ind][0] += x_ele
             ed[sl_ind][1] += y_ele
+            if ele_c is not None:
+                if sl_ind not in cd:
+                    cd[sl_ind] = []
+                cd[sl_ind].append(ele_c[xx][yy])
             y_inds += y_ele
+    ele_bis = {}
+    if ele_c is not None:
+        ecol = colors.get_len_red_to_yellow()
+        brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ecol)]
+
+        y_max = np.max(ele_c)
+        y_min = np.min(ele_c)
+        inc = (y_max - y_min) * 0.001
+        for sl_ind in cd:
+            cd[sl_ind] = np.array(cd[sl_ind])
+            ele_bis[sl_ind] = (cd[sl_ind] - y_min) / (y_max + inc - y_min) * ecol
+            ele_bis[sl_ind] = np.array(ele_bis[sl_ind], dtype=int)
 
     yc = y_all.flatten()
     for sl_ind in ed:
@@ -292,17 +320,41 @@ def plot_finite_element_mesh(win, femesh):
         ed[sl_ind][1] = np.array(ed[sl_ind][1])
         if sl_ind < 0:
             pen = pg.mkPen([200, 200, 200, 10])
-            brush = pg.mkBrush([255, 255, 255, 20])
         else:
             pen = pg.mkPen([200, 200, 200, 80])
-            brush = pg.mkBrush(cbox(sl_ind, as255=True, alpha=90))
-        ele_x_coords = x_all[ed[sl_ind][0]]
-        ele_y_coords = yc[ed[sl_ind][1]]
-        ele_connects = np.array([1, 1, 1, 1, 0] * int(len(ed[sl_ind][0]) / 5))
-        win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
-                                                  connect=ele_connects, fillLevel='enclosed',
-                                                  fillBrush=brush)
+            if ele_c is not None:
 
+                brushes = np.array(brush_list)[ele_bis[sl_ind]]
+                eles_x_coords = x_all[ed[sl_ind][0]]
+                eles_y_coords = yc[ed[sl_ind][1]]
+                for i in range(len(brushes)):
+                    ele_x_coords = eles_x_coords[i*5:(i+1)*5]
+                    ele_y_coords = eles_y_coords[i*5:(i+1)*5]
+                    ele_connects = np.array([1, 1, 1, 1, 0])
+                    brush = brushes[i]
+                    win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
+                                      connect=ele_connects, fillLevel='enclosed',
+                                      fillBrush=brush)
+                    # if i > 5:
+                    #     break
+            else:
+                if sl_ind < 0:
+                    brush = pg.mkBrush([255, 255, 255, 20])
+                else:
+                    brush = pg.mkColor(cbox(sl_ind, as255=True, alpha=90))
+                ele_x_coords = x_all[ed[sl_ind][0]]
+                ele_y_coords = yc[ed[sl_ind][1]]
+                ele_connects = np.array([1, 1, 1, 1, 0] * int(len(ed[sl_ind][0]) / 5))
+                win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
+                                                          connect=ele_connects, fillLevel='enclosed',
+                                                          fillBrush=brush)
+
+def plot_finite_element_mesh(femesh, ele_c=None):
+    win = Window()
+    win.resize(800, 600)
+    plot_finite_element_mesh_onto_win(win, femesh, ele_c=ele_c)
+    win.start()
+    
 #
 # class O3Results(object):
 #     cache_path = ''
@@ -403,7 +455,7 @@ def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1):
 
 def replot(o3res, xmag=1, ymag=1, t_scale=1):
     # if o3res.coords is None:
-    o3res.load_from_cache()
+    # o3res.load_from_cache()
 
     win = Window()
     win.resize(800, 600)
@@ -412,7 +464,7 @@ def replot(o3res, xmag=1, ymag=1, t_scale=1):
     win.init_model(o3res.coords, o3res.ele2node_tags)
 
     if o3res.dynamic:
-        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
+        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
     win.start()
 
 
