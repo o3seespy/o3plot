@@ -2,6 +2,7 @@ from PyQt5 import QtCore, QtWidgets
 import pyqtgraph as pg
 import numpy as np
 from bwplot import cbox, colors
+from o3plot import color_grid
 import os
 
 
@@ -322,19 +323,51 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
             pen = pg.mkPen([200, 200, 200, 10])
         else:
             pen = pg.mkPen([200, 200, 200, 80])
-            if ele_c is not None:
-
-                brushes = np.array(brush_list)[ele_bis[sl_ind]]
+            # ele_c = None
+            if not hasattr(ele_c, '__len__') and ele_c == 1:
                 eles_x_coords = x_all[ed[sl_ind][0]]
                 eles_y_coords = yc[ed[sl_ind][1]]
+                brushes = np.array(brush_list)[ele_bis[sl_ind]]
+                p1 = win.plotItem
                 for i in range(len(brushes)):
+
                     ele_x_coords = eles_x_coords[i*5:(i+1)*5]
                     ele_y_coords = eles_y_coords[i*5:(i+1)*5]
                     ele_connects = np.array([1, 1, 1, 1, 0])
                     brush = brushes[i]
-                    win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
-                                      connect=ele_connects, fillLevel='enclosed',
-                                      fillBrush=brush)
+                    # win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
+                    #                   connect=ele_connects, fillLevel='enclosed',
+                    #                   fillBrush=brush)
+                    item = pg.PlotDataItem(ele_x_coords, ele_y_coords, pen='w', connect=ele_connects, fillBrush=brush, fillLevel='enclosed',
+                                           name="fillLevel='enclosed'")
+
+                    p1.addItem(item)
+            elif ele_c is not None:
+
+                brushes = np.array(brush_list)[ele_bis[sl_ind]]
+                eles_x_coords = x_all[ed[sl_ind][0]]
+                eles_y_coords = yc[ed[sl_ind][1]]
+                # ele_connects = np.array([1, 1, 1, 1, 0] * int(len(ed[sl_ind][0]) / 5))
+                # win.plotItem.plot(eles_x_coords, eles_y_coords, pen=pen,
+                #                   connect=ele_connects, fillLevel='enclosed',
+                #                   fillBrush=brushes)
+                xs = []
+                ys = []
+                p1 = win.plotItem
+                for i in range(len(brushes)):
+                    ele_x_coords = eles_x_coords[i*5:(i+1)*5-1]
+                    ele_y_coords = eles_y_coords[i*5:(i+1)*5-1]
+                    print(ele_x_coords)
+                    print(ele_y_coords)
+                    ele_connects = np.array([1, 1, 1, 1, 0])
+                    brush = brushes[i]
+                    xs.append(ele_x_coords)
+                    ys.append(ele_y_coords)
+                item = color_grid.ColorGrid(xs, ys, brushes)
+                p1.addItem(item)
+                    # win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
+                    #                   connect=ele_connects, fillLevel='enclosed',
+                    #                   fillBrush=brush)
                     # if i > 5:
                     #     break
             else:
@@ -354,75 +387,6 @@ def plot_finite_element_mesh(femesh, ele_c=None):
     win.resize(800, 600)
     plot_finite_element_mesh_onto_win(win, femesh, ele_c=ele_c)
     win.start()
-    
-#
-# class O3Results(object):
-#     cache_path = ''
-#     coords = None
-#     ele2node_tags = None
-#     x_disp = None
-#     y_disp = None
-#     node_c = None
-#     dynamic = True
-#     used_r_starter = 0
-#
-#     def start_recorders(self, osi):
-#         self.used_r_starter = 1
-#         self.coords = o3.get_all_node_coords(osi)
-#         self.ele2node_tags = o3.get_all_ele2node_tags_as_dict(osi)
-#         if self.dynamic:
-#             o3.recorder.NodesToFile(osi, self.cache_path + 'x_disp.txt', 'all', [o3.cc.DOF2D_X], 'disp', nsd=4)
-#             o3.recorder.NodesToFile(osi, self.cache_path + 'y_disp.txt', 'all', [o3.cc.DOF2D_Y], 'disp', nsd=4)
-#
-#     def wipe_old_files(self):
-#         for node_len in [2, 4, 8]:
-#             ffp = self.cache_path + f'ele2node_tags_{node_len}.txt'
-#             if os.path.exists(ffp):
-#                 os.remove(ffp)
-#         if not self.used_r_starter:
-#             try:
-#                 os.remove(self.cache_path + 'x_disp.txt')
-#             except FileNotFoundError:
-#                 pass
-#             try:
-#                 os.remove(self.cache_path + 'y_disp.txt')
-#             except FileNotFoundError:
-#                 pass
-#         try:
-#             os.remove(self.cache_path + 'node_c.txt')
-#         except FileNotFoundError:
-#             pass
-#
-#     def save_to_cache(self):
-#         self.wipe_old_files()
-#         np.savetxt(self.cache_path + 'coords.txt', self.coords)
-#         for node_len in self.ele2node_tags:
-#             np.savetxt(self.cache_path + f'ele2node_tags_{node_len}.txt', self.ele2node_tags[node_len], fmt='%i')
-#         if self.dynamic:
-#             if not self.used_r_starter:
-#                 np.savetxt(self.cache_path + 'x_disp.txt', self.x_disp)
-#                 np.savetxt(self.cache_path + 'y_disp.txt', self.y_disp)
-#             if self.node_c is not None:
-#                 np.savetxt(self.cache_path + 'node_c.txt', self.node_c)
-#
-#     def load_from_cache(self):
-#         self.coords = np.loadtxt(self.cache_path + 'coords.txt')
-#         self.ele2node_tags = {}
-#         for node_len in [2, 4, 8]:
-#             try:
-#                 self.ele2node_tags[node_len] = np.loadtxt(self.cache_path + f'ele2node_tags_{node_len}.txt', ndmin=2)
-#             except OSError:
-#                 continue
-#
-#         if self.dynamic:
-#             self.x_disp = np.loadtxt(self.cache_path + 'x_disp.txt')
-#             self.y_disp = np.loadtxt(self.cache_path + 'y_disp.txt')
-#             try:
-#                 self.node_c = np.loadtxt(self.cache_path + 'node_c.txt')
-#                 if len(self.node_c) == 0:
-#                     self.node_c = None
-#             except OSError:
-#                 pass
 
 
 def replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
