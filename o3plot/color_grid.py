@@ -17,7 +17,7 @@ class ColorGrid(pg.GraphicsObject):
         """
         self.picture = QtGui.QPicture()
         p = QtGui.QPainter(self.picture)
-        p.setPen(pg.mkPen('k'))
+        p.setPen(pg.mkPen((180, 180, 180)))
         for i in range(len(self.xdata)):
             path = pg.arrayToQPath(self.xdata[i], self.ydata[i])
             p2 = QtGui.QPainterPath(path)
@@ -26,6 +26,7 @@ class ColorGrid(pg.GraphicsObject):
             else:
                 brush = self.brushes[i]
             p.fillPath(p2, brush)
+            p.drawPath(p2)
 
         p.end()
 

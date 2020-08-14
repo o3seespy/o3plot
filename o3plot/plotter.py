@@ -326,8 +326,8 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
             if ele_c is not None:
 
                 brushes = np.array(brush_list)[ele_bis[sl_ind]]
-                eles_x_coords = x_all[ed[sl_ind][0][:, :-1]]
-                eles_y_coords = yc[ed[sl_ind][1][:, :-1]]
+                eles_x_coords = x_all[ed[sl_ind][0][:, :]]
+                eles_y_coords = yc[ed[sl_ind][1][:, :]]
                 item = color_grid.ColorGrid(eles_x_coords, eles_y_coords, brushes)
                 win.plotItem.addItem(item)
 
