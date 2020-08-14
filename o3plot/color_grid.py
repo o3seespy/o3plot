@@ -17,7 +17,7 @@ class ColorGrid(pg.GraphicsObject):
         """
         self.picture = QtGui.QPicture()
         p = QtGui.QPainter(self.picture)
-        p.setPen(pg.mkPen('w'))
+        p.setPen(pg.mkPen('k'))
         for i in range(len(self.xdata)):
             path = pg.arrayToQPath(self.xdata[i], self.ydata[i])
             p2 = QtGui.QPainterPath(path)

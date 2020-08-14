@@ -295,8 +295,8 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
                 ed[sl_ind] = [[], []]
 
             y_ele = [yy + xx * n_y, yy + (xx + 1) * n_y, yy + 1 + (xx + 1) * n_y, yy + 1 + xx * n_y, yy + xx * n_y]
-            ed[sl_ind][0] += x_ele
-            ed[sl_ind][1] += y_ele
+            ed[sl_ind][0].append(x_ele)
+            ed[sl_ind][1].append(y_ele)
             if ele_c is not None:
                 if sl_ind not in cd:
                     cd[sl_ind] = []
@@ -323,54 +323,17 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
             pen = pg.mkPen([200, 200, 200, 10])
         else:
             pen = pg.mkPen([200, 200, 200, 80])
-            # ele_c = None
-            if not hasattr(ele_c, '__len__') and ele_c == 1:
-                eles_x_coords = x_all[ed[sl_ind][0]]
-                eles_y_coords = yc[ed[sl_ind][1]]
-                brushes = np.array(brush_list)[ele_bis[sl_ind]]
-                p1 = win.plotItem
-                for i in range(len(brushes)):
-
-                    ele_x_coords = eles_x_coords[i*5:(i+1)*5]
-                    ele_y_coords = eles_y_coords[i*5:(i+1)*5]
-                    ele_connects = np.array([1, 1, 1, 1, 0])
-                    brush = brushes[i]
-                    # win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
-                    #                   connect=ele_connects, fillLevel='enclosed',
-                    #                   fillBrush=brush)
-                    item = pg.PlotDataItem(ele_x_coords, ele_y_coords, pen='w', connect=ele_connects, fillBrush=brush, fillLevel='enclosed',
-                                           name="fillLevel='enclosed'")
-
-                    p1.addItem(item)
-            elif ele_c is not None:
+            if ele_c is not None:
 
                 brushes = np.array(brush_list)[ele_bis[sl_ind]]
-                eles_x_coords = x_all[ed[sl_ind][0]]
-                eles_y_coords = yc[ed[sl_ind][1]]
-                # ele_connects = np.array([1, 1, 1, 1, 0] * int(len(ed[sl_ind][0]) / 5))
-                # win.plotItem.plot(eles_x_coords, eles_y_coords, pen=pen,
-                #                   connect=ele_connects, fillLevel='enclosed',
-                #                   fillBrush=brushes)
-                xs = []
-                ys = []
-                p1 = win.plotItem
-                for i in range(len(brushes)):
-                    ele_x_coords = eles_x_coords[i*5:(i+1)*5-1]
-                    ele_y_coords = eles_y_coords[i*5:(i+1)*5-1]
-                    print(ele_x_coords)
-                    print(ele_y_coords)
-                    ele_connects = np.array([1, 1, 1, 1, 0])
-                    brush = brushes[i]
-                    xs.append(ele_x_coords)
-                    ys.append(ele_y_coords)
-                item = color_grid.ColorGrid(xs, ys, brushes)
-                p1.addItem(item)
-                    # win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
-                    #                   connect=ele_connects, fillLevel='enclosed',
-                    #                   fillBrush=brush)
-                    # if i > 5:
-                    #     break
+                eles_x_coords = x_all[ed[sl_ind][0][:, :-1]]
+                eles_y_coords = yc[ed[sl_ind][1][:, :-1]]
+                item = color_grid.ColorGrid(eles_x_coords, eles_y_coords, brushes)
+                win.plotItem.addItem(item)
+
             else:
+                ed[sl_ind][0] = np.array(ed[sl_ind][0]).flatten()
+                ed[sl_ind][1] = np.array(ed[sl_ind][1]).flatten()
                 if sl_ind < 0:
                     brush = pg.mkBrush([255, 255, 255, 20])
                 else:
