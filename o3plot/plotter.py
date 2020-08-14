@@ -312,9 +312,11 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
         inc = (y_max - y_min) * 0.001
         for sl_ind in cd:
             cd[sl_ind] = np.array(cd[sl_ind])
-            ele_bis[sl_ind] = (cd[sl_ind] - y_min) / (y_max + inc - y_min) * ecol
-            ele_bis[sl_ind] = np.array(ele_bis[sl_ind], dtype=int)
-
+            if inc == 0.0:
+                ele_bis[sl_ind] = int(ecol / 2) * np.ones_like(cd[sl_ind], dtype=int)
+            else:
+                ele_bis[sl_ind] = (cd[sl_ind] - y_min) / (y_max + inc - y_min) * ecol
+                ele_bis[sl_ind] = np.array(ele_bis[sl_ind], dtype=int)
     yc = y_all.flatten()
     for sl_ind in ed:
         ed[sl_ind][0] = np.array(ed[sl_ind][0])
