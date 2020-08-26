@@ -291,6 +291,8 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
             sl_ind = femesh.soil_grid[xx][yy]
             if sl_ind > 1000:
                 sl_ind = -1
+            elif ele_c is not None:
+                sl_ind = 1
             if sl_ind not in ed:
                 ed[sl_ind] = [[], []]
 
@@ -354,7 +356,7 @@ def plot_finite_element_mesh(femesh, ele_c=None):
     win.start()
 
 
-def replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
+def dep_replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
     import o3seespy as o3
     o3res = o3.results.Results2D()
     o3res.dynamic = dynamic
