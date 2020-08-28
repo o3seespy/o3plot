@@ -4,7 +4,7 @@ import numpy as np
 from bwplot import cbox, colors
 from o3plot import color_grid
 import os
-
+from o3plot import tools as o3ptools
 
 class bidict(dict):
     def __init__(self, *args, **kwargs):
@@ -190,6 +190,13 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
             y_max = np.max(self.ele_c)
             y_min = np.min(self.ele_c)
             inc = (y_max - y_min) * 0.001
+            # for sl_ind in cd:
+            #     cd[sl_ind] = np.array(cd[sl_ind])
+            #     if inc == 0.0:
+            #         self.ele_bis[sl_ind] = int(ecol / 2) * np.ones_like(cd[sl_ind], dtype=int)
+            #     else:
+            #         self.ele_bis[sl_ind] = (cd[sl_ind] - y_min) / (y_max + inc - y_min) * ecol
+            #         self.ele_bis[sl_ind] = np.array(ele_bis[sl_ind], dtype=int)
             ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
             self.ele_bis = np.array(ele_bis, dtype=int)
 
@@ -212,6 +219,9 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
                 pen = 'b'
             else:
                 pen = 'w'
+            if self.ele_c is not None:
+                bis = self.ele_bis[self.mat2ele[mat]]
+
             brush = pg.mkBrush(cbox(i, as255=True, alpha=80))
             ele_x_coords = self.x[self.i][self.mat2node_tags[mat] - 1]
             ele_y_coords = (self.y[self.i])[self.mat2node_tags[mat] - 1]
@@ -312,6 +322,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
         y_max = np.max(ele_c)
         y_min = np.min(ele_c)
         inc = (y_max - y_min) * 0.001
+
         for sl_ind in cd:
             cd[sl_ind] = np.array(cd[sl_ind])
             if inc == 0.0:
@@ -348,6 +359,11 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
                 win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
                                                           connect=ele_connects, fillLevel='enclosed',
                                                           fillBrush=brush)
+    lut = np.zeros((155, 3), dtype=np.ubyte)
+    lut[:, 0] = np.arange(100, 255)
+    lut = np.array([colors.red_to_yellow(i, as255=True) for i in range(ecol)], dtype=int)
+    if ele_c is not None:
+        o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c), vmax=np.max(ele_c), label='Shear\nstress [Pa]')
 
 def plot_finite_element_mesh(femesh, ele_c=None):
     win = Window()
