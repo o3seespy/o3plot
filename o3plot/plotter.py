@@ -363,13 +363,19 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
     lut[:, 0] = np.arange(100, 255)
     lut = np.array([colors.red_to_yellow(i, as255=True) for i in range(ecol)], dtype=int)
     if ele_c is not None:
-        o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c), vmax=np.max(ele_c), label='Shear\nstress [Pa]')
+        o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c), vmax=np.max(ele_c),
+                               label='Shear\nstress [Pa]', n_cols=ecol)
 
-def plot_finite_element_mesh(femesh, ele_c=None):
+
+def plot_finite_element_mesh(femesh, ele_c=None, start=True):
     win = Window()
     win.resize(800, 600)
     plot_finite_element_mesh_onto_win(win, femesh, ele_c=ele_c)
-    win.start()
+    if start:
+        win.start()
+    else:
+        win.plotItem.resize(800, 600)
+    return win
 
 
 def dep_replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):

@@ -1,6 +1,6 @@
 
 
-def add_color_bar(win, view, lut, vmin, vmax, label=''):
+def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10):
     import numpy as np
     import pyqtgraph as pg
     from PyQt5 import QtWidgets
@@ -15,7 +15,6 @@ def add_color_bar(win, view, lut, vmin, vmax, label=''):
     # define matrix for colors and set it as an image item
     bar_width = 1
     img_ax_order = pg.getConfigOption('imageAxisOrder')
-    n_cols = 10
     img = np.linspace(vmin, vmax, n_cols) * np.ones((bar_width, n_cols))
     if img_ax_order == 'row-major':
         img = img.T
