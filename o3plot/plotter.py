@@ -1,4 +1,6 @@
 from PyQt5 import QtCore, QtWidgets
+from pyqtgraph.Qt import QtGui
+import sys
 import pyqtgraph as pg
 import numpy as np
 from bwplot import cbox, colors
@@ -6,7 +8,8 @@ from o3plot import color_grid
 import os
 from o3plot import tools as o3ptools
 
-class bidict(dict):
+
+class bidict(dict):  # unused?
     def __init__(self, *args, **kwargs):
         super(bidict, self).__init__(*args, **kwargs)
         self.inverse = {}
@@ -245,11 +248,23 @@ def get_app_and_window():
     return app, Window()
 
 
-def plot_two_d_system(win, tds):
+def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700):
+    win = pg.plot()
+    img_height = max(tds.y_surf) + tds.height
+    img_width = tds.width
+    sf = min([max_px_width / img_width, max_px_height / img_height])
+    win.setGeometry(100, 100, tds.width * sf, int(max(tds.y_surf) + tds.height) * sf)
+    win.setWindowTitle(title)
+    win.setXRange(0, tds.width)
+    win.setYRange(-tds.height, max(tds.y_surf))
+    return win
+
+
+def plot_two_d_system(win, tds, c2='w', cs='b'):
     # import sfsimodels as sm
     # assert isinstance(tds, sm.TwoDSystem)
     y_sps_surf = np.interp(tds.x_sps, tds.x_surf, tds.y_surf)
-
+    win.plot(tds.x_surf, tds.y_surf, pen=c2)
     for i in range(len(tds.sps)):
         x0 = tds.x_sps[i]
         if i == len(tds.sps) - 1:
@@ -257,15 +272,15 @@ def plot_two_d_system(win, tds):
         else:
             x1 = tds.x_sps[i + 1]
         xs = np.array([x0, x1])
-        win.plot(tds.x_surf, tds.y_surf, pen='w')
-        x_angles = [0] + list(tds.sps[i].x_angles)
+        x_angles = list(tds.sps[i].x_angles)
         sp = tds.sps[i]
-        for ll in range(2, sp.n_layers + 1):
+        for ll in range(1, sp.n_layers + 1):
             ys = y_sps_surf[i] - sp.layer_depth(ll) + x_angles[ll - 1] * (xs - x0)
-            win.plot(xs, ys, pen='w')
-    win.plot([0, 0], [-tds.height, tds.y_surf[0]], pen='w')
-    win.plot([tds.width, tds.width], [-tds.height, tds.y_surf[-1]], pen='w')
-    win.plot([0, tds.width], [-tds.height, -tds.height], pen='w')
+            win.plot(xs, ys, pen=cs)
+        win.plot([x0, x0], [y_sps_surf[i], -tds.height], pen=c2)
+    win.plot([0, 0], [-tds.height, tds.y_surf[0]], pen=c2)
+    win.plot([tds.width, tds.width], [-tds.height, tds.y_surf[-1]], pen=c2)
+    win.plot([0, tds.width], [-tds.height, -tds.height], pen=c2)
     for i, bd in enumerate(tds.bds):
         fd = bd.fd
         fcx = tds.x_bds[i] + bd.x_fd
@@ -273,7 +288,7 @@ def plot_two_d_system(win, tds):
         print(fcx, fcy)
         x = [fcx - fd.width / 2, fcx + fd.width / 2, fcx + fd.width / 2, fcx - fd.width / 2, fcx - fd.width / 2]
         y = [fcy - fd.depth, fcy - fd.depth, fcy - fd.depth + fd.height, fcy - fd.depth + fd.height, fcy - fd.depth]
-        win.plot(x, y, pen='r')
+        win.plot(x, y, pen=c2)
 
 
 def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
@@ -359,10 +374,11 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
                 win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
                                                           connect=ele_connects, fillLevel='enclosed',
                                                           fillBrush=brush)
-    lut = np.zeros((155, 3), dtype=np.ubyte)
-    lut[:, 0] = np.arange(100, 255)
-    lut = np.array([colors.red_to_yellow(i, as255=True) for i in range(ecol)], dtype=int)
+
     if ele_c is not None:
+        lut = np.zeros((155, 3), dtype=np.ubyte)
+        lut[:, 0] = np.arange(100, 255)
+        lut = np.array([colors.red_to_yellow(i, as255=True) for i in range(ecol)], dtype=int)
         o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c), vmax=np.max(ele_c),
                                label='Shear\nstress [Pa]', n_cols=ecol)
 
@@ -419,6 +435,72 @@ def replot(o3res, xmag=1, ymag=1, t_scale=1):
     if o3res.dynamic:
         win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
     win.start()
+
+
+def show_constructor(fc):
+    femesh = fc.femesh
+    win = pg.plot()
+    win.setWindowTitle('ECP definition')
+    win.setXRange(0, fc.tds.width)
+    win.setYRange(-fc.tds.height, max(fc.tds.y_surf))
+
+    plot_finite_element_mesh_onto_win(win, femesh)
+
+    xcs = list(fc.yd)
+    xcs.sort()
+    xcs = np.array(xcs)
+    for i in range(len(xcs)):
+        win.addItem(pg.InfiniteLine(xcs[i], angle=90, pen=(0, 255, 0, 100)))
+
+    for i, sp in enumerate(fc.tds.sps):
+        if i == 0:
+            x_curr = 0
+        else:
+            x_curr = fc.tds.x_sps[i]
+        if i == len(fc.tds.sps) - 1:
+            x_next = fc.tds.width - 0
+        else:
+            x_next = fc.tds.x_sps[i + 1]
+        y_surf_lhs = np.interp(x_curr, fc.tds.x_surf, fc.tds.y_surf)
+        for j in range(1, sp.n_layers):
+            sl = sp.layer(j + 1)
+            y_tl = y_surf_lhs - sp.layer_depth(j + 1)
+            y_bl = y_tl - sp.layer_height(j + 1)
+            y_tr = y_tl + (x_next - x_curr) * sp.x_angles[j - 1]
+            y_br = y_bl + (x_next - x_curr) * sp.x_angles[j]
+            pen = pg.mkPen(color=(20, 20, 20), width=2)
+            win.plot(x=[x_curr, x_next], y=[y_tl, y_tr], pen=pen)
+
+        for j in range(len(fc.sds)):
+            pen = pg.mkPen(color=(200, 0, 0), width=2)
+            win.plot(x=fc.sds[j][0], y=fc.sds[j][1], pen=pen)
+
+    # o3plot.plot_two_d_system(win, tds)
+    # #
+    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+        QtGui.QApplication.instance().exec_()
+        
+def show():
+    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+        QtGui.QApplication.instance().exec_()
+
+
+def revamp_legend(leg):
+    lab_names = []
+    leg_items = []
+    for item in leg.items:
+        sample = item[0]
+        label = item[1]
+        if label.text not in lab_names:
+            lab_names.append(label.text)
+            leg_items.append(item)
+        else:
+            leg.layout.removeItem(sample)  # remove from layout
+            sample.close()  # remove from drawing
+            leg.layout.removeItem(label)
+            label.close()
+    leg.items = leg_items
+    leg.updateSize()
 
 
 # if __name__ == '__main__':
