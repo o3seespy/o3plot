@@ -277,8 +277,9 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b'):
         x_angles = list(tds.sps[i].x_angles)
         sp = tds.sps[i]
         for ll in range(1, sp.n_layers + 1):
-            ys = y_sps_surf[i] - sp.layer_depth(ll) + x_angles[ll - 1] * (xs - x0)
-            win.plot(xs, ys, pen=cs)
+            if x_angles[ll - 1] is not None:
+                ys = y_sps_surf[i] - sp.layer_depth(ll) + x_angles[ll - 1] * (xs - x0)
+                win.plot(xs, ys, pen=cs)
         win.plot([x0, x0], [y_sps_surf[i], -tds.height], pen=c2)
     win.plot([0, 0], [-tds.height, tds.y_surf[0]], pen=c2)
     win.plot([tds.width, tds.width], [-tds.height, tds.y_surf[-1]], pen=c2)
