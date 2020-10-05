@@ -260,7 +260,9 @@ def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height
     return win
 
 
-def plot_two_d_system(win, tds, c2='w', cs='b'):
+def plot_two_d_system(tds, win=None, c2='w', cs='b'):
+    if win is None:
+        win = pg.plot()
     # import sfsimodels as sm
     # assert isinstance(tds, sm.TwoDSystem)
     y_sps_surf = np.interp(tds.x_sps, tds.x_surf, tds.y_surf)
@@ -346,6 +348,10 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
                 ele_bis[sl_ind] = (cd[sl_ind] - y_min) / (y_max + inc - y_min) * ecol
                 ele_bis[sl_ind] = np.array(ele_bis[sl_ind], dtype=int)
     yc = y_all.flatten()
+    xc = x_all.flatten()
+    if len(xc) == len(yc):  # then it is vary_xy
+        for item in ed:
+            ed[item][0] = ed[item][1]
     for sl_ind in ed:
         ed[sl_ind][0] = np.array(ed[sl_ind][0])
         ed[sl_ind][1] = np.array(ed[sl_ind][1])
@@ -356,7 +362,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
             if ele_c is not None:
 
                 brushes = np.array(brush_list)[ele_bis[sl_ind]]
-                eles_x_coords = x_all[ed[sl_ind][0][:, :]]
+                eles_x_coords = xc[ed[sl_ind][0][:, :]]
                 eles_y_coords = yc[ed[sl_ind][1][:, :]]
                 item = color_grid.ColorGrid(eles_x_coords, eles_y_coords, brushes)
                 win.plotItem.addItem(item)
@@ -368,7 +374,8 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
                     brush = pg.mkBrush([255, 255, 255, 20])
                 else:
                     brush = pg.mkColor(cbox(sl_ind, as255=True, alpha=90))
-                ele_x_coords = x_all[ed[sl_ind][0]]
+                ele_x_coords = xc[ed[sl_ind][0]]
+                # ele_x_coords = xc[ed[sl_ind][1]]
                 ele_y_coords = yc[ed[sl_ind][1]]
                 ele_connects = np.array([1, 1, 1, 1, 0] * int(len(ed[sl_ind][0]) / 5))
                 win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
@@ -383,14 +390,13 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
                                label='Shear\nstress [Pa]', n_cols=ecol)
 
 
-def plot_finite_element_mesh(femesh, ele_c=None, start=True):
-    win = Window()
-    win.resize(800, 600)
+def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
+    if win is None:
+        win = Window()
+        win.resize(800, 600)
     plot_finite_element_mesh_onto_win(win, femesh, ele_c=ele_c)
     if start:
         win.start()
-    else:
-        win.plotItem.resize(800, 600)
     return win
 
 
