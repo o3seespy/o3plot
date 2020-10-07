@@ -294,7 +294,7 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b'):
         win.plot(x, y, pen=c2)
 
 
-def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
+def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label=''):
     """
     Plots a finite element mesh object
 
@@ -312,6 +312,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
         n_y = 0
     ed = {}
     cd = {}
+    active_eles = np.where(femesh.soil_grid != femesh.inactive_value)
     for xx in range(len(femesh.soil_grid)):
         x_ele = [xx, xx + 1, xx + 1, xx, xx]
         x_inds += x_ele * (n_y - 1)
@@ -337,8 +338,8 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
         ecol = colors.get_len_red_to_yellow()
         brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ecol)]
 
-        y_max = np.max(ele_c)
-        y_min = np.min(ele_c)
+        y_max = np.max(ele_c[active_eles])
+        y_min = np.min(ele_c[active_eles])
         inc = (y_max - y_min) * 0.001
 
         for sl_ind in cd:
@@ -387,8 +388,9 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None):
         lut = np.zeros((155, 3), dtype=np.ubyte)
         lut[:, 0] = np.arange(100, 255)
         lut = np.array([colors.red_to_yellow(i, as255=True) for i in range(ecol)], dtype=int)
-        o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c), vmax=np.max(ele_c),
-                               label='Shear\nstress [Pa]', n_cols=ecol)
+        a_inds = np.where(femesh.soil_grid != femesh.inactive_value)
+        o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c[a_inds]), vmax=np.max(ele_c[a_inds]),
+                               label=label, n_cols=ecol)
 
 
 def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
