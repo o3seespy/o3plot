@@ -44,3 +44,9 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10):
     overlay_vb.setParentItem(col_scale_vb.parentItem())
     col_scale_vb.setRange(xRange=[0, bar_width], yRange=[0, n_cols], padding=0.0, update=False, disableAutoRange=True)
 
+
+def _load_mod_dat():
+    import os
+    folder_path = os.path.dirname(os.path.realpath(__file__))
+    return open(os.path.join(folder_path, 'models_data.dat'))
+

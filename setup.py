@@ -42,7 +42,7 @@ setup(name='o3plot',
           'test': ['pytest'],
       },
       python_requires='>=3',
-      package_data={},
+      package_data={'o3plot': ['o3plot/models_data.dat']},
       zip_safe=False)
 
 
