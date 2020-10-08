@@ -43,6 +43,7 @@ setup(name='o3plot',
       },
       python_requires='>=3',
       package_data={'o3plot': ['o3plot/models_data.dat']},
+      include_package_data=True,
       zip_safe=False)
 
 
