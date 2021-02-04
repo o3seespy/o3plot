@@ -294,12 +294,17 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b'):
         win.plot(x, y, pen=c2)
 
 
-def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label=''):
+def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=100):
     """
     Plots a finite element mesh object
 
     :param win:
     :param femesh:
+    :param ele_c: array_like or str or None
+        Specifies how he elements are colored, if None the color based on soil index,
+        if str, the str must must a soil property and the color is scaled based on the value of the property
+        if array_like, if shape of soil_grid, then color scale based on value,
+        if array_like, if shape[:2] == soil_grid.shape(), and shape[2:]==3, then last axis interpreted as color values
     :return:
     """
     x_all = femesh.x_nodes
@@ -318,7 +323,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label=''):
         x_inds += x_ele * (n_y - 1)
         for yy in range(len(femesh.soil_grid[xx])):
             sl_ind = femesh.soil_grid[xx][yy]
-            if sl_ind > 1000:
+            if sl_ind == femesh.inactive_value:
                 sl_ind = -1
             elif ele_c is not None:
                 sl_ind = 1
@@ -335,25 +340,31 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label=''):
             y_inds += y_ele
     ele_bis = {}
     if ele_c is not None:
-        ecol = colors.get_len_red_to_yellow()
-        brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ecol)]
+        if len(ele_c.shape) == 2:
+            ecol = colors.get_len_red_to_yellow()
+            brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True, alpha=alpha)) for i in range(ecol)]
 
-        y_max = np.max(ele_c[active_eles])
-        y_min = np.min(ele_c[active_eles])
-        inc = (y_max - y_min) * 0.001
+            y_max = np.max(ele_c[active_eles])
+            y_min = np.min(ele_c[active_eles])
+            inc = (y_max - y_min) * 0.001
 
-        for sl_ind in cd:
-            cd[sl_ind] = np.array(cd[sl_ind])
-            if inc == 0.0:
-                ele_bis[sl_ind] = int(ecol / 2) * np.ones_like(cd[sl_ind], dtype=int)
-            else:
-                ele_bis[sl_ind] = (cd[sl_ind] - y_min) / (y_max + inc - y_min) * ecol
-                ele_bis[sl_ind] = np.array(ele_bis[sl_ind], dtype=int)
+            for sl_ind in cd:
+                cd[sl_ind] = np.array(cd[sl_ind])
+                if inc == 0.0:
+                    ele_bis[sl_ind] = int(ecol / 2) * np.ones_like(cd[sl_ind], dtype=int)
+                else:
+                    ele_bis[sl_ind] = (cd[sl_ind] - y_min) / (y_max + inc - y_min) * ecol
+                    ele_bis[sl_ind] = np.array(ele_bis[sl_ind], dtype=int)
+        elif len(ele_c.shape) == 3:
+            pass
+        else:
+            raise ValueError('ele_c must be same dimensions as soil_grid')
     yc = y_all.flatten()
     xc = x_all.flatten()
     if len(xc) == len(yc):  # then it is vary_xy
         for item in ed:
             ed[item][0] = ed[item][1]
+
     for sl_ind in ed:
         ed[sl_ind][0] = np.array(ed[sl_ind][0])
         ed[sl_ind][1] = np.array(ed[sl_ind][1])
@@ -363,19 +374,28 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label=''):
             pen = pg.mkPen([200, 200, 200, 80])
             if ele_c is not None:
 
-                brushes = np.array(brush_list)[ele_bis[sl_ind]]
-                eles_x_coords = xc[ed[sl_ind][0][:, :]]
-                eles_y_coords = yc[ed[sl_ind][1][:, :]]
+                if len(ele_c.shape) == 3:  # colors directly specified
+
+                    # brushes = np.array(brush_list)[ele_bis[sl_ind]]
+                    brushes_col = ele_c[active_eles]
+                    brushes = np.array([pg.mkColor(col) for col in brushes_col])  # TODO: v. slow
+                    # eles_x_coords = xc[ed[sl_ind][0]]
+                    # eles_y_coords = yc[ed[sl_ind][1]]
+                    # ele_ind = ele
+                    # item = color_grid.ColorGrid(eles_x_coords, eles_y_coords, brushes)
+                else:
+                    brushes = np.array(brush_list)[ele_bis[sl_ind]]
+                eles_x_coords = xc[ed[sl_ind][0]]
+                eles_y_coords = yc[ed[sl_ind][1]]
                 item = color_grid.ColorGrid(eles_x_coords, eles_y_coords, brushes)
                 win.plotItem.addItem(item)
-
             else:
                 ed[sl_ind][0] = np.array(ed[sl_ind][0]).flatten()
                 ed[sl_ind][1] = np.array(ed[sl_ind][1]).flatten()
                 if sl_ind < 0:
                     brush = pg.mkBrush([255, 255, 255, 20])
                 else:
-                    brush = pg.mkColor(cbox(sl_ind, as255=True, alpha=90))
+                    brush = pg.mkColor(cbox(sl_ind, as255=True, alpha=alpha))
                 ele_x_coords = xc[ed[sl_ind][0]]
                 # ele_x_coords = xc[ed[sl_ind][1]]
                 ele_y_coords = yc[ed[sl_ind][1]]
@@ -384,13 +404,15 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label=''):
                                                           connect=ele_connects, fillLevel='enclosed',
                                                           fillBrush=brush)
 
-    if ele_c is not None:
+    if ele_c is not None and len(ele_c.shape) != 3:
         lut = np.zeros((155, 3), dtype=np.ubyte)
         lut[:, 0] = np.arange(100, 255)
         lut = np.array([colors.red_to_yellow(i, as255=True) for i in range(ecol)], dtype=int)
         a_inds = np.where(femesh.soil_grid != femesh.inactive_value)
         o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c[a_inds]), vmax=np.max(ele_c[a_inds]),
                                label=label, n_cols=ecol)
+        
+    return win.plotItem
 
 
 def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
