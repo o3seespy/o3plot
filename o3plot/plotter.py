@@ -2,6 +2,7 @@ from PyQt5 import QtCore, QtWidgets
 from pyqtgraph.Qt import QtGui
 import sys
 import pyqtgraph as pg
+import pyqtgraph.exporters
 import numpy as np
 from bwplot import cbox, colors
 from o3plot import color_grid
@@ -248,12 +249,12 @@ def get_app_and_window():
     return app, Window()
 
 
-def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700):
+def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700, y_sf=1):
     win = pg.plot()
     img_height = max(tds.y_surf) + tds.height
     img_width = tds.width
     sf = min([max_px_width / img_width, max_px_height / img_height])
-    win.setGeometry(100, 100, tds.width * sf, int(max(tds.y_surf) + tds.height) * sf)
+    win.setGeometry(100, 100, tds.width * sf, int(max(tds.y_surf) + tds.height) * sf * y_sf)
     win.setWindowTitle(title)
     win.setXRange(0, tds.width)
     win.setYRange(-tds.height, max(tds.y_surf))
@@ -294,7 +295,7 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b'):
         win.plot(x, y, pen=c2)
 
 
-def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=100):
+def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=255):
     """
     Plots a finite element mesh object
 
@@ -415,6 +416,22 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=1
     return win.plotItem
 
 
+def plot_node_disps(femesh, win, x_disps, y_disps):
+    node_connects = np.array([1, 1, 0] * np.size(x_disps))
+    xi_flat = femesh.x_nodes.flatten()
+    yi_flat = femesh.y_nodes.flatten()
+    xd_flat = x_disps.flatten()
+    yd_flat = y_disps.flatten()
+    x_coords = np.array([xi_flat, xi_flat + xd_flat, xi_flat]).flatten(order='F')
+    y_coords = np.array([yi_flat, yi_flat + yd_flat, yi_flat]).flatten(order='F')
+    pen = pg.mkPen([200, 0, 0, 200])
+    curve = win.plotItem.plot(x_coords, y_coords, pen=pen,
+                      connect=node_connects)
+    # pg.CurveArrow(curve)
+    # win.plotItem.Cu(x_coords, y_coords, pen=pen,
+    #                   connect=node_connects)
+
+
 def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
     if win is None:
         win = Window()
@@ -515,6 +532,10 @@ def show():
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
 
+def save(win, ffp, width=1000):
+    exp = pg.exporters.ImageExporter(win.plotItem)
+    exp.params['width'] = width
+    exp.export()
 
 def revamp_legend(leg):
     lab_names = []
