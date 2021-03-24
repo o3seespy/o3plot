@@ -15,24 +15,38 @@ class bidict(dict):  # unused?
         super(bidict, self).__init__(*args, **kwargs)
         self.inverse = {}
         for key, value in self.items():
-            self.inverse.setdefault(value,[]).append(key)
+            self.inverse.setdefault(value, []).append(key)
 
     def __setitem__(self, key, value):
         if key in self:
             self.inverse[self[key]].remove(key)
         super(bidict, self).__setitem__(key, value)
-        self.inverse.setdefault(value,[]).append(key)
+        self.inverse.setdefault(value, []).append(key)
 
     def __delitem__(self, key):
-        self.inverse.setdefault(self[key],[]).remove(key)
+        self.inverse.setdefault(self[key], []).remove(key)
         if self[key] in self.inverse and not self.inverse[self[key]]:
             del self.inverse[self[key]]
         super(bidict, self).__delitem__(key)
 
 
+class FEMGUI(QtGui.QWidget):
+    def __init__(self):
+        super(FEMGUI, self).__init__()
+        hbox = self.mainLayout
+
+        self.plotwidget = pg.PlotWidget()
+        hbox.addWidget(self.plotwidget)
+
+        self.increasebutton = QtGui.QPushButton("Increase Amplitude")
+        self.decreasebutton = QtGui.QPushButton("Decrease Amplitude")
+
+        hbox.addWidget(self.increasebutton)
+        hbox.addWidget(self.decreasebutton)
+
+
 class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
     started = 0
-    selected_nodes = None
 
     def __init__(self, parent=None):
         self.app = QtWidgets.QApplication([])
@@ -43,13 +57,41 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
         self.mainLayout = QtWidgets.QVBoxLayout()
         self.setLayout(self.mainLayout)
         self.timer = QtCore.QTimer(self)
+
+        self.plotItem = self.addPlot(title="Nodes")
+        self.fem_plot = FEMPlot(self.plotItem, self.timer)
+
+    def init_model(self, coords, ele2node_tags=None):
+        self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
+
+    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
+        self.fem_plot.plot_dynamic(x, y, dt, xmag=xmag, ymag=ymag, node_c=node_c, ele_c=ele_c, t_scale=t_scale)
+
+    def start(self):
+        if not self.started:
+            self.started = 1
+            self.raise_()
+            self.app.exec_()
+
+    # def stop(self):
+    #     print('Exit')
+    #     self.status = False
+    #     self.app.close()
+    #     pg.close()
+
+
+class FEMPlot(object):
+    selected_nodes = None
+
+    def __init__(self, plot_item, timer):
+        self.plotItem = plot_item
+        self.timer = timer
         self.x_coords = None
         self.y_coords = None
         self.x = None
         self.y = None
         self.time = None
         self.i = 0
-        self.plotItem = self.addPlot(title="Nodes")
         self.node_points_plot = None
         self.ele_lines_plot = {}
         self.ele2node_tags = {}
@@ -67,7 +109,7 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
 
     @mat2ele.setter
     def mat2ele(self, m2e_list):
-        
+
         # self._mat2ele = bidict(m2e_dict)
         for line in m2e_list:
             if line[0] not in self._mat2ele:
@@ -141,7 +183,7 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
                 connect[:, -1] = 0
                 ele_x_coords = ele_x_coords.flatten()
                 ele_y_coords = ele_y_coords.flatten()
-                self.ele_connects[mat] = connect.flatten()
+                self.ele_connects[mat] = connect
                 nl = len(self.ele2node_tags[eles[0]])
                 if nl == 2:
                     pen = 'b'
@@ -149,8 +191,8 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
                     pen = 'w'
                 brush = pg.mkBrush(cbox(i, as255=True, alpha=80))
                 self.ele_lines_plot[mat] = self.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
-                                                         connect=self.ele_connects[mat], fillLevel='enclosed',
-                                                         fillBrush=brush)
+                                                              connect=self.ele_connects[mat].flatten(), fillLevel='enclosed',
+                                                              fillBrush=brush)
         if self.show_nodes:
             self.node_points_plot = self.plotItem.plot([], pen=None,
                                                        symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None)
@@ -158,13 +200,7 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
         self.plotItem.autoRange(padding=0.05)  # TODO: depends on xmag
         self.plotItem.disableAutoRange()
 
-    def start(self):
-        if not self.started:
-            self.started = 1
-            self.raise_()
-            self.app.exec_()
-
-    def plot(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
+    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
         self.timer.setInterval(1000. * dt * t_scale)  # in milliseconds
         self.timer.start()
         self.node_c = node_c
@@ -191,23 +227,20 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
         if self.ele_c is not None:
             ecol = colors.get_len_red_to_yellow()
             self.ele_brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ecol)]
-
-            y_max = np.max(self.ele_c)
-            y_min = np.min(self.ele_c)
+            active_eles = np.array(list(self.ele2node_tags))
+            y_max = np.max(self.ele_c[active_eles])
+            y_min = np.min(self.ele_c[active_eles])
             inc = (y_max - y_min) * 0.001
-            # for sl_ind in cd:
-            #     cd[sl_ind] = np.array(cd[sl_ind])
-            #     if inc == 0.0:
-            #         self.ele_bis[sl_ind] = int(ecol / 2) * np.ones_like(cd[sl_ind], dtype=int)
-            #     else:
-            #         self.ele_bis[sl_ind] = (cd[sl_ind] - y_min) / (y_max + inc - y_min) * ecol
-            #         self.ele_bis[sl_ind] = np.array(ele_bis[sl_ind], dtype=int)
+            print('ymin, ymax: ', y_min, y_max)
+
             ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
             self.ele_bis = np.array(ele_bis, dtype=int)
 
         self.timer.timeout.connect(self.updater)
 
     def updater(self):
+        if self.ele_c is not None:
+            return self.updater_w_ele_c()
         self.i = self.i + 1
         if self.i == len(self.time) - 1:
             self.timer.stop()
@@ -225,24 +258,75 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
                 pen = 'b'
             else:
                 pen = 'w'
-            if self.ele_c is not None:
-                bis = self.ele_bis[self.mat2ele[mat]]
+
 
             brush = pg.mkBrush(cbox(i, as255=True, alpha=80))
             ele_x_coords = self.x[self.i][self.mat2node_tags[mat] - 1]
             ele_y_coords = (self.y[self.i])[self.mat2node_tags[mat] - 1]
             ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
             ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
-            self.ele_lines_plot[mat].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[mat],
-                                             fillLevel='enclosed', fillBrush=brush)
+            self.ele_lines_plot[mat].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[mat].flatten(),
+                                         fillLevel='enclosed', fillBrush=brush)
         self.plotItem.setTitle(f"Nodes time: {self.time[self.i]:.4g}s")
 
-    def stop(self):
-        print('Exit')
-        self.status = False
-        self.app.close()
-        pg.close()
-        # sys.exit()
+    def updater_w_ele_c(self):
+        self.i = self.i + 1
+        if self.i == len(self.time) - 1:
+            self.timer.stop()
+
+        if self.node_c is not None:
+            blist = np.array(self.node_brush_list)[self.node_bis[self.i]]
+            # TODO: try using ScatterPlotWidget and colorMap
+            if self.show_nodes:
+                self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o', symbolBrush=blist)
+        elif self.show_nodes:
+            self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o')
+        for i, mat in enumerate(self.mat2node_tags):
+            nl = len(self.ele2node_tags[self.mat2ele[mat][0]])
+            if nl == 2:
+                pen = 'b'
+            else:
+                pen = 'w'
+        bis = self.ele_bis[self.mat2ele[mat], self.i]  # TODO: need ele
+        unique_bis = list(set(list(bis.flatten())))
+        unique_bis = np.arange(colors.get_len_red_to_yellow())
+        print(self.i, 'unique_bis: ', unique_bis)
+
+        if self.i == 1:
+            self.p_items = {}
+            for i, mat in enumerate(self.mat2node_tags):
+                self.plotItem.removeItem(self.ele_lines_plot[mat])
+                self.p_items[mat] = {}
+                for bi in unique_bis:
+                    brush = pg.mkBrush(self.ele_brush_list[bi])
+
+                    self.p_items[mat][bi] = self.plotItem.plot([], [], pen=pen, connect=[], fillLevel='enclosed',
+                                                                  fillBrush=brush)
+
+        for i, mat in enumerate(self.mat2node_tags):
+            nl = len(self.ele2node_tags[self.mat2ele[mat][0]])
+            if nl == 2:
+                pen = pg.mkPen([0, 0, 250, 80], width=0.7)
+            else:
+                pen = pg.mkPen([200, 200, 200, 80], width=0.7)
+
+            for bi in unique_bis:
+                inds = np.where(bis == bi)
+                if len(inds[0]):
+                    brush = pg.mkBrush(self.ele_brush_list[bi])
+                    w = self.mat2node_tags[mat]
+                    r = self.mat2node_tags[mat][inds]
+                    cons1 = self.ele_connects[mat]
+                    cons = self.ele_connects[mat][inds]
+                    ele_x_coords1 = self.x[self.i][(self.mat2node_tags[mat] - 1)]
+                    ele_x_coords = self.x[self.i][(self.mat2node_tags[mat][inds] - 1)]
+                    ele_y_coords = (self.y[self.i])[(self.mat2node_tags[mat][inds] - 1)]
+                    ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
+                    ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
+                    self.p_items[mat][bi].setData(ele_x_coords, ele_y_coords, pen=pen, connect=cons.flatten(),
+                                         fillLevel='enclosed', fillBrush=brush)
+                else:
+                    self.p_items[mat][bi].setData([], [])
 
 
 def get_app_and_window():
@@ -404,8 +488,8 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
                 ele_y_coords = yc[ed[sl_ind][1]]
                 ele_connects = np.array([1, 1, 1, 1, 0] * int(len(ed[sl_ind][0]) / 5))
                 win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
-                                                          connect=ele_connects, fillLevel='enclosed',
-                                                          fillBrush=brush)
+                                  connect=ele_connects, fillLevel='enclosed',
+                                  fillBrush=brush)
 
     if ele_c is not None and len(ele_c.shape) != 3:
         lut = np.zeros((155, 3), dtype=np.ubyte)
@@ -414,7 +498,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
         a_inds = np.where(femesh.soil_grid != femesh.inactive_value)
         o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c[a_inds]), vmax=np.max(ele_c[a_inds]),
                                label=label, n_cols=ecol)
-        
+
     return win.plotItem
 
 
@@ -428,7 +512,7 @@ def plot_node_disps(femesh, win, x_disps, y_disps):
     y_coords = np.array([yi_flat, yi_flat + yd_flat, yi_flat]).flatten(order='F')
     pen = pg.mkPen([200, 0, 0, 200])
     curve = win.plotItem.plot(x_coords, y_coords, pen=pen,
-                      connect=node_connects)
+                              connect=node_connects)
     # pg.CurveArrow(curve)
     # win.plotItem.Cu(x_coords, y_coords, pen=pen,
     #                   connect=node_connects)
@@ -444,35 +528,19 @@ def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
     return win
 
 
-def dep_replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
-    import o3seespy as o3
-    o3res = o3.results.Results2D()
-    o3res.dynamic = dynamic
-    o3res.cache_path = out_folder
-    o3res.load_from_cache()
-
-    win = FEMWindow()
-    win.resize(800, 600)
-    win.mat2ele = o3res.mat2ele_tags
-    win.init_model(o3res.coords, o3res.ele2node_tags)
-
-    if dynamic:
-        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
-    win.start()
-
 def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
-
     win = FEMWindow()
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
-    win.show_nodes = show_nodes
+    win.fem_plot.show_nodes = show_nodes
     win.init_model(o3res.coords, o3res.ele2node_tags)
 
-
     if o3res.dynamic:
-        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
+        win.plot_dynamic(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag,
+                         ymag=ymag, t_scale=t_scale)
     win.start()
+
 
 def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
     # if o3res.coords is None:
@@ -482,11 +550,12 @@ def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
-    win.show_nodes = show_nodes
+    win.fem_plot.show_nodes = show_nodes
     win.init_model(o3res.coords, o3res.ele2node_tags)
 
     if o3res.dynamic:
-        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
+        win.plot_dynamic(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag,
+                         ymag=ymag, t_scale=t_scale)
     win.start()
 
 
@@ -532,15 +601,18 @@ def show_constructor(fc):
     # #
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
-        
+
+
 def show():
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()
+
 
 def save(win, ffp, width=1000):
     exp = pg.exporters.ImageExporter(win.plotItem)
     exp.params['width'] = width
     exp.export(ffp)
+
 
 def revamp_legend(leg):
     lab_names = []
@@ -558,7 +630,6 @@ def revamp_legend(leg):
             label.close()
     leg.items = leg_items
     leg.updateSize()
-
 
 # if __name__ == '__main__':
 #
