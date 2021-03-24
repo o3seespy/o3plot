@@ -30,7 +30,7 @@ class bidict(dict):  # unused?
         super(bidict, self).__delitem__(key)
 
 
-class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
+class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
     started = 0
     selected_nodes = None
 
@@ -59,6 +59,7 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         self.ele_connects = {}
         # self._mat2ele = bidict({})
         self._mat2ele = {}
+        self.show_nodes = 1
 
     @property
     def mat2ele(self):
@@ -150,10 +151,10 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
                 self.ele_lines_plot[mat] = self.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
                                                          connect=self.ele_connects[mat], fillLevel='enclosed',
                                                          fillBrush=brush)
-
-        self.node_points_plot = self.plotItem.plot([], pen=None,
-                                                   symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None)
-        self.node_points_plot.setData(self.x_coords, self.y_coords)
+        if self.show_nodes:
+            self.node_points_plot = self.plotItem.plot([], pen=None,
+                                                       symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None)
+            self.node_points_plot.setData(self.x_coords, self.y_coords)
         self.plotItem.autoRange(padding=0.05)  # TODO: depends on xmag
         self.plotItem.disableAutoRange()
 
@@ -214,8 +215,9 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
         if self.node_c is not None:
             blist = np.array(self.node_brush_list)[self.node_bis[self.i]]
             # TODO: try using ScatterPlotWidget and colorMap
-            self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o', symbolBrush=blist)
-        else:
+            if self.show_nodes:
+                self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o', symbolBrush=blist)
+        elif self.show_nodes:
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o')
         for i, mat in enumerate(self.mat2node_tags):
             nl = len(self.ele2node_tags[self.mat2ele[mat][0]])
@@ -246,7 +248,7 @@ class Window(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(
 def get_app_and_window():
     app = QtWidgets.QApplication([])
     pg.setConfigOptions(antialias=False)  # True seems to work as well
-    return app, Window()
+    return app, FEMWindow()
 
 
 def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700, y_sf=1):
@@ -370,9 +372,9 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
         ed[sl_ind][0] = np.array(ed[sl_ind][0])
         ed[sl_ind][1] = np.array(ed[sl_ind][1])
         if sl_ind < 0:
-            pen = pg.mkPen([200, 200, 200, 10])
+            pen = pg.mkPen([200, 200, 200, 10], width=0.7)
         else:
-            pen = pg.mkPen([200, 200, 200, 80])
+            pen = pg.mkPen([200, 200, 200, 80], width=0.7)
             if ele_c is not None:
 
                 if len(ele_c.shape) == 3:  # colors directly specified
@@ -434,7 +436,7 @@ def plot_node_disps(femesh, win, x_disps, y_disps):
 
 def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
     if win is None:
-        win = Window()
+        win = FEMWindow()
         win.resize(800, 600)
     plot_finite_element_mesh_onto_win(win, femesh, ele_c=ele_c)
     if start:
@@ -449,7 +451,7 @@ def dep_replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
     o3res.cache_path = out_folder
     o3res.load_from_cache()
 
-    win = Window()
+    win = FEMWindow()
     win.resize(800, 600)
     win.mat2ele = o3res.mat2ele_tags
     win.init_model(o3res.coords, o3res.ele2node_tags)
@@ -458,26 +460,29 @@ def dep_replot(out_folder='', dynamic=0, dt=0.01, xmag=1, ymag=1, t_scale=1):
         win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
     win.start()
 
-def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1):
+def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
 
-    win = Window()
+    win = FEMWindow()
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
+    win.show_nodes = show_nodes
     win.init_model(o3res.coords, o3res.ele2node_tags)
 
+
     if o3res.dynamic:
-        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
+        win.plot(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag, ymag=ymag, t_scale=t_scale)
     win.start()
 
-def replot(o3res, xmag=1, ymag=1, t_scale=1):
+def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
     # if o3res.coords is None:
     # o3res.load_from_cache()
 
-    win = Window()
+    win = FEMWindow()
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
+    win.show_nodes = show_nodes
     win.init_model(o3res.coords, o3res.ele2node_tags)
 
     if o3res.dynamic:
@@ -535,7 +540,7 @@ def show():
 def save(win, ffp, width=1000):
     exp = pg.exporters.ImageExporter(win.plotItem)
     exp.params['width'] = width
-    exp.export()
+    exp.export(ffp)
 
 def revamp_legend(leg):
     lab_names = []
