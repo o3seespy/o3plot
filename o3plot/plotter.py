@@ -31,18 +31,74 @@ class bidict(dict):  # unused?
 
 
 class FEMGUI(QtGui.QWidget):
+    started = 0
     def __init__(self):
+        self.app = QtGui.QApplication(sys.argv)
         super(FEMGUI, self).__init__()
+
+        self.setWindowTitle('FEM viewer')
+
+        self.mainLayout = QtWidgets.QVBoxLayout()
+        self.setLayout(self.mainLayout)
         hbox = self.mainLayout
 
-        self.plotwidget = pg.PlotWidget()
-        hbox.addWidget(self.plotwidget)
+        self.reset_timer_button = QtGui.QPushButton("Reset timer")
+        self.pause_button = QtGui.QPushButton("Pause")
+        self.step_forward_button = QtGui.QPushButton("+1 step")
+        self.step_backward_button = QtGui.QPushButton("-1 step")
 
-        self.increasebutton = QtGui.QPushButton("Increase Amplitude")
-        self.decreasebutton = QtGui.QPushButton("Decrease Amplitude")
+        hbox.addWidget(self.reset_timer_button)
+        hbox.addWidget(self.pause_button)
+        hbox.addWidget(self.step_forward_button)
+        hbox.addWidget(self.step_backward_button)
+        self.qt_connections()
 
-        hbox.addWidget(self.increasebutton)
-        hbox.addWidget(self.decreasebutton)
+        self.plotItem = pg.PlotWidget()
+        hbox.addWidget(self.plotItem)
+
+        self.setGeometry(10, 10, 1000, 600)
+
+        self.timer = QtCore.QTimer(self)
+
+        # self.plotItem = self.plotwidget.addPlot(title="Nodes")
+        self.fem_plot = FEMPlot(self.plotItem, self.timer)
+        self.show()
+
+    def init_model(self, coords, ele2node_tags=None):
+        self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
+
+    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
+        self.fem_plot.plot_dynamic(x, y, dt, xmag=xmag, ymag=ymag, node_c=node_c, ele_c=ele_c, t_scale=t_scale)
+
+    def start(self):
+        if not self.started:
+            self.started = 1
+            self.raise_()
+            self.app.exec_()
+
+    def pause(self):
+        print('pause clicked')
+        self.timer.stop()
+
+    def reset_timer(self):
+        self.fem_plot.i = 0
+        self.fem_plot.updater()
+        self.timer.stop()
+
+    def on_step_forward_clicked(self):
+        print('step forward clicked')
+        # self.fem_plot.i += 1
+        self.fem_plot.updater()
+
+    def on_step_backward_clicked(self):
+        self.fem_plot.i -= 2
+        self.fem_plot.updater()
+
+    def qt_connections(self):
+        self.reset_timer_button.clicked.connect(self.reset_timer)
+        self.pause_button.clicked.connect(self.pause)
+        self.step_forward_button.clicked.connect(self.on_step_forward_clicked)
+        self.step_backward_button.clicked.connect(self.on_step_backward_clicked)
 
 
 class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
@@ -235,15 +291,27 @@ class FEMPlot(object):
 
             ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
             self.ele_bis = np.array(ele_bis, dtype=int)
+            unique_bis = np.arange(colors.get_len_red_to_yellow())
+
+            self.p_items = {}
+            for i, mat in enumerate(self.mat2node_tags):
+                self.plotItem.removeItem(self.ele_lines_plot[mat])
+                self.p_items[mat] = {}
+                for bi in unique_bis:
+                    brush = pg.mkBrush(self.ele_brush_list[bi])
+
+                    self.p_items[mat][bi] = self.plotItem.plot([], [], pen='w', connect=[], fillLevel='enclosed',
+                                                                  fillBrush=brush)
 
         self.timer.timeout.connect(self.updater)
 
     def updater(self):
-        if self.ele_c is not None:
-            return self.updater_w_ele_c()
-        self.i = self.i + 1
+
         if self.i == len(self.time) - 1:
             self.timer.stop()
+            return
+        if self.ele_c is not None:
+            return self.updater_w_ele_c()
 
         if self.node_c is not None:
             blist = np.array(self.node_brush_list)[self.node_bis[self.i]]
@@ -258,7 +326,6 @@ class FEMPlot(object):
                 pen = 'b'
             else:
                 pen = 'w'
-
 
             brush = pg.mkBrush(cbox(i, as255=True, alpha=80))
             ele_x_coords = self.x[self.i][self.mat2node_tags[mat] - 1]
@@ -268,11 +335,9 @@ class FEMPlot(object):
             self.ele_lines_plot[mat].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[mat].flatten(),
                                          fillLevel='enclosed', fillBrush=brush)
         self.plotItem.setTitle(f"Nodes time: {self.time[self.i]:.4g}s")
+        self.i = self.i + 1
 
     def updater_w_ele_c(self):
-        self.i = self.i + 1
-        if self.i == len(self.time) - 1:
-            self.timer.stop()
 
         if self.node_c is not None:
             blist = np.array(self.node_brush_list)[self.node_bis[self.i]]
@@ -287,21 +352,8 @@ class FEMPlot(object):
                 pen = 'b'
             else:
                 pen = 'w'
-        bis = self.ele_bis[self.mat2ele[mat], self.i]  # TODO: need ele
-        unique_bis = list(set(list(bis.flatten())))
+        bis = self.ele_bis[self.mat2ele[mat], self.i]
         unique_bis = np.arange(colors.get_len_red_to_yellow())
-        print(self.i, 'unique_bis: ', unique_bis)
-
-        if self.i == 1:
-            self.p_items = {}
-            for i, mat in enumerate(self.mat2node_tags):
-                self.plotItem.removeItem(self.ele_lines_plot[mat])
-                self.p_items[mat] = {}
-                for bi in unique_bis:
-                    brush = pg.mkBrush(self.ele_brush_list[bi])
-
-                    self.p_items[mat][bi] = self.plotItem.plot([], [], pen=pen, connect=[], fillLevel='enclosed',
-                                                                  fillBrush=brush)
 
         for i, mat in enumerate(self.mat2node_tags):
             nl = len(self.ele2node_tags[self.mat2ele[mat][0]])
@@ -327,6 +379,7 @@ class FEMPlot(object):
                                          fillLevel='enclosed', fillBrush=brush)
                 else:
                     self.p_items[mat][bi].setData([], [])
+        self.i = self.i + 1
 
 
 def get_app_and_window():
@@ -529,7 +582,7 @@ def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
 
 
 def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
-    win = FEMWindow()
+    win = FEMGUI()
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
