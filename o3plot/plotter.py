@@ -158,6 +158,7 @@ class FEMPlot(object):
         # self._mat2ele = bidict({})
         self._mat2ele = {}
         self.show_nodes = 1
+        self.color_scheme = 'purple2green'
 
     @property
     def mat2ele(self):
@@ -271,8 +272,9 @@ class FEMPlot(object):
 
         # Prepare node colors
         if self.node_c is not None:
-            ncol = colors.get_len_red_to_yellow()
-            self.node_brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ncol)]
+            cols = colors.get_colors(self.color_scheme)
+            ncol = len(cols)
+            self.node_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ncol)]
 
             y_max = np.max(self.node_c)
             y_min = np.min(self.node_c)
@@ -281,8 +283,9 @@ class FEMPlot(object):
             self.node_bis = np.array(node_bis, dtype=int)
 
         if self.ele_c is not None:
-            ecol = colors.get_len_red_to_yellow()
-            self.ele_brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True)) for i in range(ecol)]
+            cols = colors.get_colors(self.color_scheme)
+            ecol = len(cols)
+            self.ele_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ecol)]
             active_eles = np.array(list(self.ele2node_tags))
             y_max = np.max(self.ele_c[active_eles])
             y_min = np.min(self.ele_c[active_eles])
@@ -291,7 +294,7 @@ class FEMPlot(object):
 
             ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
             self.ele_bis = np.array(ele_bis, dtype=int)
-            unique_bis = np.arange(colors.get_len_red_to_yellow())
+            unique_bis = np.arange(ecol)
 
             self.p_items = {}
             for i, mat in enumerate(self.mat2node_tags):
@@ -352,8 +355,9 @@ class FEMPlot(object):
                 pen = 'b'
             else:
                 pen = 'w'
+
         bis = self.ele_bis[self.mat2ele[mat], self.i]
-        unique_bis = np.arange(colors.get_len_red_to_yellow())
+        unique_bis = np.arange(len(colors.get_colors(self.color_scheme)))
 
         for i, mat in enumerate(self.mat2node_tags):
             nl = len(self.ele2node_tags[self.mat2ele[mat][0]])
