@@ -13,6 +13,7 @@ class Results2D(object):
     sect2ele_tags = None  # Store position and tag - UNUSED
     mat2sect_tags = None  # UNUSED  # TODO: implement
     n_nodes_per_ele = [2, 4, 8]  # for 2D
+    ele_node_base = 0
 
     def __init__(self, cache_path='', dt=None, dynamic=False):
         self.cache_path = cache_path

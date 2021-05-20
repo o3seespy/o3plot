@@ -32,7 +32,7 @@ class bidict(dict):  # unused?
 
 class FEMGUI(QtGui.QWidget):
     started = 0
-    def __init__(self):
+    def __init__(self, copts=None):
         self.app = QtGui.QApplication(sys.argv)
         super(FEMGUI, self).__init__()
 
@@ -61,7 +61,7 @@ class FEMGUI(QtGui.QWidget):
         self.timer = QtCore.QTimer(self)
 
         # self.plotItem = self.plotwidget.addPlot(title="Nodes")
-        self.fem_plot = FEMPlot(self.plotItem, self.timer)
+        self.fem_plot = FEMPlot(self.plotItem, self.timer, copts=copts)
         self.show()
 
     def init_model(self, coords, ele2node_tags=None):
@@ -120,8 +120,9 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
     def init_model(self, coords, ele2node_tags=None):
         self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
 
-    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
-        self.fem_plot.plot_dynamic(x, y, dt, xmag=xmag, ymag=ymag, node_c=node_c, ele_c=ele_c, t_scale=t_scale)
+    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1, ele_num_base=0):
+        self.fem_plot.plot_dynamic(x, y, dt, xmag=xmag, ymag=ymag, node_c=node_c, ele_c=ele_c, t_scale=t_scale,
+                                   ele_num_base=ele_num_base)
 
     def start(self):
         if not self.started:
@@ -139,7 +140,7 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
 class FEMPlot(object):
     selected_nodes = None
 
-    def __init__(self, plot_item, timer):
+    def __init__(self, plot_item, timer, copts=None):
         self.plotItem = plot_item
         self.timer = timer
         self.x_coords = None
@@ -158,7 +159,14 @@ class FEMPlot(object):
         # self._mat2ele = bidict({})
         self._mat2ele = {}
         self.show_nodes = 1
-        self.color_scheme = 'purple2green'
+        if copts is None:
+            copts = {}
+
+        cscheme = copts.setdefault('scheme', 'red2yellow')
+        self.cbal = copts.setdefault('bal', 0)
+        cunits = copts.setdefault('units', '')
+        self.cinc = copts.setdefault('inc', None)
+        self.color_scheme = cscheme
 
     @property
     def mat2ele(self):
@@ -257,7 +265,7 @@ class FEMPlot(object):
         self.plotItem.autoRange(padding=0.05)  # TODO: depends on xmag
         self.plotItem.disableAutoRange()
 
-    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
+    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1, ele_num_base=0):
         self.timer.setInterval(1000. * dt * t_scale)  # in milliseconds
         self.timer.start()
         self.node_c = node_c
@@ -276,6 +284,7 @@ class FEMPlot(object):
             ncol = len(cols)
             self.node_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ncol)]
 
+            inc = (y_max - y_min) * 0.001
             y_max = np.max(self.node_c)
             y_min = np.min(self.node_c)
             inc = (y_max - y_min) * 0.001
@@ -286,16 +295,25 @@ class FEMPlot(object):
             cols = colors.get_colors(self.color_scheme)
             ecol = len(cols)
             self.ele_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ecol)]
-            active_eles = np.array(list(self.ele2node_tags))
-            y_max = np.max(self.ele_c[active_eles])
-            y_min = np.min(self.ele_c[active_eles])
+            active_eles = np.array(list(self.ele2node_tags)) - ele_num_base
+            if self.cbal:
+                mabs = np.max(abs(self.ele_c[active_eles]))
+                y_max = mabs
+                y_min = -mabs
+            else:
+                y_max = np.max(self.ele_c[active_eles])
+                y_min = np.min(self.ele_c[active_eles])
+            if self.cinc:
+                y_max = np.ceil(y_max / self.cinc) * self.cinc
+                y_min = np.floor(y_min / self.cinc) * self.cinc
+
             inc = (y_max - y_min) * 0.001
             print('ymin, ymax: ', y_min, y_max)
 
             ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
             self.ele_bis = np.array(ele_bis, dtype=int)
             unique_bis = np.arange(ecol)
-
+            # TODO: use unique_bis = list(set(self.ele_bis)); unique_bis.sort()
             self.p_items = {}
             for i, mat in enumerate(self.mat2node_tags):
                 self.plotItem.removeItem(self.ele_lines_plot[mat])
@@ -349,17 +367,11 @@ class FEMPlot(object):
                 self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o', symbolBrush=blist)
         elif self.show_nodes:
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o')
-        for i, mat in enumerate(self.mat2node_tags):
-            nl = len(self.ele2node_tags[self.mat2ele[mat][0]])
-            if nl == 2:
-                pen = 'b'
-            else:
-                pen = 'w'
 
-        bis = self.ele_bis[self.mat2ele[mat], self.i]
-        unique_bis = np.arange(len(colors.get_colors(self.color_scheme)))
 
         for i, mat in enumerate(self.mat2node_tags):
+            bis = self.ele_bis[self.mat2ele[mat], self.i]
+            unique_bis = np.arange(len(colors.get_colors(self.color_scheme)))
             nl = len(self.ele2node_tags[self.mat2ele[mat][0]])
             if nl == 2:
                 pen = pg.mkPen([0, 0, 250, 80], width=0.7)
@@ -392,7 +404,7 @@ def get_app_and_window():
     return app, FEMWindow()
 
 
-def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700, y_sf=1):
+def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700, y_sf=1, y_extra=2):
     win = pg.plot()
     img_height = max(tds.y_surf) + tds.height
     img_width = tds.width
@@ -400,7 +412,7 @@ def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height
     win.setGeometry(100, 100, tds.width * sf, int(max(tds.y_surf) + tds.height) * sf * y_sf)
     win.setWindowTitle(title)
     win.setXRange(0, tds.width)
-    win.setYRange(-tds.height, max(tds.y_surf))
+    win.setYRange(-tds.height, max(tds.y_surf) + y_extra)
     return win
 
 
@@ -438,7 +450,8 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b'):
         win.plot(x, y, pen=c2)
 
 
-def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=255):
+def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=255, pw=0.7, copts=None,
+                                      ):
     """
     Plots a finite element mesh object
 
@@ -449,8 +462,17 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
         if str, the str must must a soil property and the color is scaled based on the value of the property
         if array_like, if shape of soil_grid, then color scale based on value,
         if array_like, if shape[:2] == soil_grid.shape(), and shape[2:]==3, then last axis interpreted as color values
+    :param pw: pen width
     :return:
     """
+    if copts is None:
+        copts = {}
+
+    cscheme = copts.setdefault('scheme', 'red2yellow')
+    cbal = copts.setdefault('bal', 0)
+    cunits = copts.setdefault('units', '')
+    cinc = copts.setdefault('inc', None)
+
     x_all = femesh.x_nodes
     y_all = femesh.y_nodes
     x_inds = []
@@ -485,11 +507,19 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
     ele_bis = {}
     if ele_c is not None:
         if len(ele_c.shape) == 2:
-            ecol = colors.get_len_red_to_yellow()
-            brush_list = [pg.mkColor(colors.red_to_yellow(i, as255=True, alpha=alpha)) for i in range(ecol)]
-
-            y_max = np.max(ele_c[active_eles])
-            y_min = np.min(ele_c[active_eles])
+            sch_cols = np.array(colors.get_colors(cscheme))
+            ecol = len(sch_cols)
+            brush_list = [pg.mkColor(colors.color_by_index(cscheme, i, as255=True, alpha=alpha)) for i in range(ecol)]
+            if cbal:
+                mabs = np.max(abs(ele_c[active_eles]))
+                y_max = mabs
+                y_min = -mabs
+            else:
+                y_max = np.max(ele_c[active_eles])
+                y_min = np.min(ele_c[active_eles])
+            if cinc:
+                y_max = np.ceil(y_max / cinc) * cinc
+                y_min = np.floor(y_min / cinc) * cinc
             inc = (y_max - y_min) * 0.001
 
             for sl_ind in cd:
@@ -513,9 +543,9 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
         ed[sl_ind][0] = np.array(ed[sl_ind][0])
         ed[sl_ind][1] = np.array(ed[sl_ind][1])
         if sl_ind < 0:
-            pen = pg.mkPen([200, 200, 200, 10], width=0.7)
+            pen = pg.mkPen([200, 200, 200, 10], width=pw)
         else:
-            pen = pg.mkPen([200, 200, 200, 80], width=0.7)
+            pen = pg.mkPen([200, 200, 200, 80], width=pw)
             if ele_c is not None:
 
                 if len(ele_c.shape) == 3:  # colors directly specified
@@ -551,23 +581,73 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
     if ele_c is not None and len(ele_c.shape) != 3:
         lut = np.zeros((155, 3), dtype=np.ubyte)
         lut[:, 0] = np.arange(100, 255)
-        lut = np.array([colors.red_to_yellow(i, as255=True) for i in range(ecol)], dtype=int)
+        lut = np.array([colors.color_by_index(cscheme, i, as255=True) for i in range(ecol)], dtype=int)
         a_inds = np.where(femesh.soil_grid != femesh.inactive_value)
-        o3ptools.add_color_bar(win, win.plotItem, lut, vmin=np.min(ele_c[a_inds]), vmax=np.max(ele_c[a_inds]),
-                               label=label, n_cols=ecol)
+        o3ptools.add_color_bar(win, win.plotItem, lut, vmin=y_min, vmax=y_max,
+                               label=label, n_cols=ecol, units=cunits, bal=cbal)
 
     return win.plotItem
 
 
-def plot_node_disps(femesh, win, x_disps, y_disps):
-    node_connects = np.array([1, 1, 0] * np.size(x_disps))
-    xi_flat = femesh.x_nodes.flatten()
-    yi_flat = femesh.y_nodes.flatten()
-    xd_flat = x_disps.flatten()
-    yd_flat = y_disps.flatten()
+def plot_node_disps(femesh, win, x_disps, y_disps, active_only=1):
+
+
+    anodes = femesh.get_active_nodes()
+    x_i_active = femesh.x_nodes[np.where(anodes)]
+    y_i_active = femesh.y_nodes[np.where(anodes)]
+    x_d_active = x_disps[np.where(anodes)]
+    y_d_active = y_disps[np.where(anodes)]
+    node_connects = np.array([1, 1, 0] * np.size(x_d_active))
+
+    xi_flat = x_i_active.flatten()
+    yi_flat = y_i_active.flatten()
+    xd_flat = x_d_active.flatten()
+    yd_flat = y_d_active.flatten()
+
     x_coords = np.array([xi_flat, xi_flat + xd_flat, xi_flat]).flatten(order='F')
     y_coords = np.array([yi_flat, yi_flat + yd_flat, yi_flat]).flatten(order='F')
     pen = pg.mkPen([200, 0, 0, 200])
+    curve = win.plotItem.plot(x_coords, y_coords, pen=pen,
+                              connect=node_connects)
+    # pg.CurveArrow(curve)
+    # win.plotItem.Cu(x_coords, y_coords, pen=pen,
+    #                   connect=node_connects)
+
+
+def plot_node_arrows(femesh, win, x_offs, y_offs, active_only=1, pen='g'):
+
+
+    anodes = femesh.get_active_nodes()
+    x_i_active = femesh.x_nodes[np.where(anodes)]
+    y_i_active = femesh.y_nodes[np.where(anodes)]
+    x_d_active = x_offs[np.where(anodes)]
+    y_d_active = y_offs[np.where(anodes)]
+    node_connects = np.array([1, 1, 1, 1, 1, 0] * np.size(x_d_active))
+
+    xi = x_i_active.flatten()
+    yi = y_i_active.flatten()
+    dx = x_d_active.flatten()
+    dy = y_d_active.flatten()
+    px = xi + dx
+    py = yi + dy
+    
+    cos_35 = 0.819
+    sin_35 = 0.574
+    px = xi + dx
+    py = yi + dy
+    arrow_head_ratio = 0.1
+    ndx = dx * arrow_head_ratio
+    ndy = dy * arrow_head_ratio
+    x_la = px - (ndx * cos_35 + ndy * -sin_35)
+    y_la = py - (ndx * sin_35 + ndy * cos_35)
+    x_ra = px - (ndx * cos_35 + ndy * sin_35)
+    y_ra = py - (ndx * -sin_35 + ndy * cos_35)
+
+    x_coords = np.array([xi, px, x_la, px, x_ra, px]).flatten(order='F')
+    y_coords = np.array([yi, py, y_la, py, y_ra, py]).flatten(order='F')
+    # x_coords = np.array([xi, xf, x_la, xf, x_ra, xf]).flatten(order='F')
+    # y_coords = np.array([yi, yf, y_la, yf, y_ra, yf]).flatten(order='F')
+    # pen = pg.mkPen([200, 0, 0, 200])
     curve = win.plotItem.plot(x_coords, y_coords, pen=pen,
                               connect=node_connects)
     # pg.CurveArrow(curve)
@@ -585,8 +665,8 @@ def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
     return win
 
 
-def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
-    win = FEMGUI()
+def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, copts=None):
+    win = FEMGUI(copts=copts)
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
@@ -599,9 +679,15 @@ def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
     win.start()
 
 
-def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1):
+def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0):
     # if o3res.coords is None:
     # o3res.load_from_cache()
+
+    if ele_num_base:
+        new_ele2node = {}
+        for ele_id in o3res.ele2node_tags:
+            new_ele2node[ele_id - ele_num_base] = o3res.ele2node_tags[ele_id]
+        o3res.ele2node_tags = new_ele2node
 
     win = FEMWindow()
     win.resize(800, 600)
