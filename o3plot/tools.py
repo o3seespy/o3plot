@@ -1,6 +1,6 @@
 
 
-def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal=0):
+def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal=0, copts=None):
     import numpy as np
     import pyqtgraph as pg
     from PyQt5 import QtWidgets
@@ -11,6 +11,9 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
     col_scale_vb.setMinimumWidth(10)
     col_scale_vb.setMaximumWidth(20)
     win.addItem(col_scale_vb)
+    if copts is None:
+        copts = {}
+    leg_pen = copts.setdefault('leg_pen', 'w')
 
     # define matrix for colors and set it as an image item
     bar_width = 1
@@ -36,7 +39,8 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
     axis_item.setZValue(101)
     # axis_item.textWidth = 8
     axis_item.enableAutoSIPrefix(False)  # TODO: should be a copts
-    axis_item.setPen('w')
+    
+    axis_item.setPen(leg_pen)
     axis_item.setStyle(autoExpandTextSpace=True, tickLength=3)
     if bal:
         axis_item.setTicks([[(vmin, f'{vmin: .3g}'), (0, '0'), (vmax, f'{vmax: .3g}')]])

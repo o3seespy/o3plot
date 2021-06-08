@@ -416,13 +416,13 @@ def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height
     return win
 
 
-def plot_two_d_system(tds, win=None, c2='w', cs='b'):
+def plot_two_d_system(tds, win=None, c2='w', cs='b', xshift=0):
     if win is None:
         win = pg.plot()
     # import sfsimodels as sm
     # assert isinstance(tds, sm.TwoDSystem)
     y_sps_surf = np.interp(tds.x_sps, tds.x_surf, tds.y_surf)
-    win.plot(tds.x_surf, tds.y_surf, pen=c2)
+    win.plot(tds.x_surf - xshift, tds.y_surf, pen=c2)
     for i in range(len(tds.sps)):
         x0 = tds.x_sps[i]
         if i == len(tds.sps) - 1:
@@ -435,19 +435,19 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b'):
         for ll in range(1, sp.n_layers + 1):
             if x_angles[ll - 1] is not None:
                 ys = y_sps_surf[i] - sp.layer_depth(ll) + x_angles[ll - 1] * (xs - x0)
-                win.plot(xs, ys, pen=cs)
-        win.plot([x0, x0], [y_sps_surf[i], -tds.height], pen=c2)
-    win.plot([0, 0], [-tds.height, tds.y_surf[0]], pen=c2)
-    win.plot([tds.width, tds.width], [-tds.height, tds.y_surf[-1]], pen=c2)
-    win.plot([0, tds.width], [-tds.height, -tds.height], pen=c2)
+                win.plot(xs - xshift, ys, pen=cs)
+        win.plot([x0-xshift, x0-xshift], [y_sps_surf[i], -tds.height], pen=c2)
+    win.plot([-xshift, -xshift], [-tds.height, tds.y_surf[0]], pen=c2)
+    win.plot([tds.width-xshift, tds.width-xshift], [-tds.height, tds.y_surf[-1]], pen=c2)
+    win.plot([0-xshift, tds.width-xshift], [-tds.height, -tds.height], pen=c2)
     for i, bd in enumerate(tds.bds):
         fd = bd.fd
         fcx = tds.x_bds[i] + bd.x_fd
         fcy = np.interp(fcx, tds.x_surf, tds.y_surf)
         print(fcx, fcy)
-        x = [fcx - fd.width / 2, fcx + fd.width / 2, fcx + fd.width / 2, fcx - fd.width / 2, fcx - fd.width / 2]
+        x = np.array([fcx - fd.width / 2, fcx + fd.width / 2, fcx + fd.width / 2, fcx - fd.width / 2, fcx - fd.width / 2])
         y = [fcy - fd.depth, fcy - fd.depth, fcy - fd.depth + fd.height, fcy - fd.depth + fd.height, fcy - fd.depth]
-        win.plot(x, y, pen=c2)
+        win.plot(x-xshift, y, pen=c2)
 
 
 def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=255, pw=0.7, copts=None,
@@ -472,6 +472,10 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
     cbal = copts.setdefault('bal', 0)
     cunits = copts.setdefault('units', '')
     cinc = copts.setdefault('inc', None)
+    white_mid = copts.setdefault('white_mid', False)
+    crange = copts.setdefault('crange', None)
+    palpha = copts.setdefault('palpha', 80)
+    leg_pen = copts.setdefault('leg_pen', 'w')
 
     x_all = femesh.x_nodes
     y_all = femesh.y_nodes
@@ -510,20 +514,24 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
             sch_cols = np.array(colors.get_colors(cscheme))
             ecol = len(sch_cols)
             brush_list = [pg.mkColor(colors.color_by_index(cscheme, i, as255=True, alpha=alpha)) for i in range(ecol)]
-            if cbal:
-                mabs = np.max(abs(ele_c[active_eles]))
-                y_max = mabs
-                y_min = -mabs
+            if crange is None:
+                if cbal:
+                    mabs = np.max(abs(ele_c[active_eles]))
+                    y_max = mabs
+                    y_min = -mabs
+                else:
+                    y_max = np.max(ele_c[active_eles])
+                    y_min = np.min(ele_c[active_eles])
+                if cinc:
+                    y_max = np.ceil(y_max / cinc) * cinc
+                    y_min = np.floor(y_min / cinc) * cinc
             else:
-                y_max = np.max(ele_c[active_eles])
-                y_min = np.min(ele_c[active_eles])
-            if cinc:
-                y_max = np.ceil(y_max / cinc) * cinc
-                y_min = np.floor(y_min / cinc) * cinc
+                y_min = crange[0]
+                y_max = crange[1]
             inc = (y_max - y_min) * 0.001
 
             for sl_ind in cd:
-                cd[sl_ind] = np.array(cd[sl_ind])
+                cd[sl_ind] = np.clip(cd[sl_ind], y_min, y_max)
                 if inc == 0.0:
                     ele_bis[sl_ind] = int(ecol / 2) * np.ones_like(cd[sl_ind], dtype=int)
                 else:
@@ -545,7 +553,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
         if sl_ind < 0:
             pen = pg.mkPen([200, 200, 200, 10], width=pw)
         else:
-            pen = pg.mkPen([200, 200, 200, 80], width=pw)
+            pen = pg.mkPen([200, 200, 200, palpha], width=pw)
             if ele_c is not None:
 
                 if len(ele_c.shape) == 3:  # colors directly specified
@@ -583,8 +591,11 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
         lut[:, 0] = np.arange(100, 255)
         lut = np.array([colors.color_by_index(cscheme, i, as255=True) for i in range(ecol)], dtype=int)
         a_inds = np.where(femesh.soil_grid != femesh.inactive_value)
+        leg_copts = {
+            'leg_pen': leg_pen
+        }
         o3ptools.add_color_bar(win, win.plotItem, lut, vmin=y_min, vmax=y_max,
-                               label=label, n_cols=ecol, units=cunits, bal=cbal)
+                               label=label, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
 
     return win.plotItem
 

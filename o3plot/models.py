@@ -14,6 +14,8 @@ class Results2D(object):
     mat2sect_tags = None  # UNUSED  # TODO: implement
     n_nodes_per_ele = [2, 4, 8]  # for 2D
     ele_node_base = 0
+    selected_nodes = None
+    _selected_node_tags = None
 
     def __init__(self, cache_path='', dt=None, dynamic=False):
         self.cache_path = cache_path
@@ -29,19 +31,12 @@ class Results2D(object):
 
 
     def wipe_old_files(self):
-        general = ['ele2node_tags', 'coords']
-        for gen_file in general:
-            try:
-                os.remove(f'{self.cache_path}{gen_file}.txt')
-            except FileNotFoundError:
-                pass
+        sfiles = ['ele2node_tags', 'coords', 'selected_node_tags']
         if not self.used_r_starter:
+            sfiles += ['x_disp', 'y_disp', 'timer']
+        for fname in sfiles:
             try:
-                os.remove(f'{self.cache_path}x_disp.txt')
-            except FileNotFoundError:
-                pass
-            try:
-                os.remove(f'{self.cache_path}y_disp.txt')
+                os.remove(f'{self.cache_path}{fname}.txt')
             except FileNotFoundError:
                 pass
 
@@ -51,11 +46,26 @@ class Results2D(object):
             except FileNotFoundError:
                 pass
 
+    @property
+    def selected_node_tags(self):
+        if self._selected_node_tags is None:
+            if self.selected_nodes is None:
+                return None
+            self._selected_node_tags = [x.tag for x in self.selected_nodes]
+        return self._selected_node_tags
+
+    @selected_node_tags.setter
+    def selected_node_tags(self, tags):
+        self._selected_node_tags = tags
+
     def save_to_cache(self):
         self.wipe_old_files()
-        self.savetxt(self.cache_path + 'coords.txt', self.coords)
+        if self.coords is not None:
+            self.savetxt(self.cache_path + 'coords.txt', self.coords)
         ostr = [f'{ele_tag} ' + ' '.join([str(x) for x in self.ele2node_tags[ele_tag]]) + '\n' for ele_tag in self.ele2node_tags]
         open(self.cache_path + 'ele2node_tags.txt', 'w').writelines(ostr)
+        if self.selected_node_tags is not None:
+            self.savetxt(self.cache_path + 'selected_node_tags.txt', self.selected_node_tags, fmt='%i')
 
         for i, fname in enumerate(self.meta_files):
             vals = getattr(self, fname)
@@ -74,6 +84,12 @@ class Results2D(object):
 
     def load_from_cache(self):
         self.coords = self.loadtxt(self.cache_path + 'coords.txt')
+
+        try:
+            self.selected_node_tags = self.loadtxt(self.cache_path + 'selected_node_tags.txt', dtype=int)
+        except OSError:
+            pass
+
         self.ele2node_tags = {}
         lines = open(self.cache_path + 'ele2node_tags.txt').read().splitlines()
         for line in lines:
@@ -104,17 +120,19 @@ class Results2D(object):
     def dt(self, dt):
         self._dt = dt
 
-    # def rezero_node_tags(self, osi):
-    #     from numpy import array, arange, searchsorted, where
-    #     node_tags = array(o3.get_node_tags(osi))
-    #     new_node_tags = arange(1, len(node_tags) + 1)
-    #     sidx = node_tags.argsort()
-    #     k = node_tags[sidx]
-    #     v = new_node_tags[sidx]
-    #     for ele_tag in self.ele2node_tags:
-    #         curr_tags = self.ele2node_tags[ele_tag]
-    #         idx = searchsorted(k, curr_tags)
-    #         assert max(idx) < len(k)
-    #         mask = k[idx] == curr_tags
-    #         self.ele2node_tags[ele_tag] = where(mask, v[idx], len(k))
-
+    def rezero_node_tags(self, osi=None):
+        from numpy import array, arange, searchsorted, where
+        if self.selected_node_tags is None:
+            raise ValueError('selected_node_tags must be set')
+        else:
+            node_tags = self.selected_node_tags
+        new_node_tags = arange(1, len(node_tags) + 1)
+        sidx = node_tags.argsort()
+        k = node_tags[sidx]
+        v = new_node_tags[sidx]
+        for ele_tag in self.ele2node_tags:
+            curr_tags = self.ele2node_tags[ele_tag]
+            idx = searchsorted(k, curr_tags)
+            assert max(idx) < len(k)
+            mask = k[idx] == curr_tags
+            self.ele2node_tags[ele_tag] = where(mask, v[idx], len(k))
