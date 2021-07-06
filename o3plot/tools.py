@@ -10,7 +10,7 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
     col_scale_vb.setMouseEnabled(x=False, y=False)
     col_scale_vb.setMinimumWidth(10)
     col_scale_vb.setMaximumWidth(20)
-    win.addItem(col_scale_vb)
+    win.addItem(col_scale_vb)  # Was addItem
     if copts is None:
         copts = {}
     leg_pen = copts.setdefault('leg_pen', 'w')

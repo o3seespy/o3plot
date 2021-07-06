@@ -53,19 +53,24 @@ class FEMGUI(QtGui.QWidget):
         hbox.addWidget(self.step_backward_button)
         self.qt_connections()
 
-        self.plotItem = pg.PlotWidget()
-        hbox.addWidget(self.plotItem)
+        self.win = pg.PlotWidget()
+        self.win.scene().sigMouseClicked.connect(self.mouse_clicked)
+        hbox.addWidget(self.win)
+        self.hbox = hbox
 
         self.setGeometry(10, 10, 1000, 600)
 
         self.timer = QtCore.QTimer(self)
 
         # self.plotItem = self.plotwidget.addPlot(title="Nodes")
-        self.fem_plot = FEMPlot(self.plotItem, self.timer, copts=copts)
+        self.fem_plot = FEMPlot(self.win, self.timer, copts=copts)
         self.show()
 
     def init_model(self, coords, ele2node_tags=None):
         self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
+
+    def mouse_clicked(self):
+        print('Mouse clicked')
 
     def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
         self.fem_plot.plot_dynamic(x, y, dt, xmag=xmag, ymag=ymag, node_c=node_c, ele_c=ele_c, t_scale=t_scale)
@@ -140,8 +145,8 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
 class FEMPlot(object):
     selected_nodes = None
 
-    def __init__(self, plot_item, timer, copts=None):
-        self.plotItem = plot_item
+    def __init__(self, win, timer, copts=None):
+        self.plotItem = win.plotItem
         self.timer = timer
         self.x_coords = None
         self.y_coords = None
@@ -161,6 +166,7 @@ class FEMPlot(object):
         self.show_nodes = 1
         if copts is None:
             copts = {}
+        self.win = win
 
         cscheme = copts.setdefault('scheme', 'red2yellow')
         self.cbal = copts.setdefault('bal', 0)
@@ -255,17 +261,25 @@ class FEMPlot(object):
                 else:
                     pen = 'w'
                 brush = pg.mkBrush(cbox(i, as255=True, alpha=80))
-                self.ele_lines_plot[mat] = self.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
+                self.ele_lines_plot[mat] = self.win.plot(ele_x_coords, ele_y_coords, pen=pen,
                                                               connect=self.ele_connects[mat].flatten(), fillLevel='enclosed',
                                                               fillBrush=brush)
         if self.show_nodes:
-            self.node_points_plot = self.plotItem.plot([], pen=None,
+            self.node_points_plot = self.win.plot([], pen=None,
                                                        symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None)
             self.node_points_plot.setData(self.x_coords, self.y_coords)
-        self.plotItem.autoRange(padding=0.05)  # TODO: depends on xmag
-        self.plotItem.disableAutoRange()
+        self.win.autoRange(padding=0.05)  # TODO: depends on xmag
+        self.win.disableAutoRange()
 
     def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1, ele_num_base=0):
+        copts = {}
+        leg_pen = copts.setdefault('leg_pen', 'w')
+        cscheme = copts.setdefault('scheme', 'red2yellow')
+        cscheme = self.color_scheme
+        cbal = copts.setdefault('bal', 0)
+        cunits = copts.setdefault('units', '')
+        clabel = copts.setdefault('clabel', 'vals')
+
         self.timer.setInterval(1000. * dt * t_scale)  # in milliseconds
         self.timer.start()
         self.node_c = node_c
@@ -284,16 +298,15 @@ class FEMPlot(object):
             ncol = len(cols)
             self.node_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ncol)]
 
-            inc = (y_max - y_min) * 0.001
-            y_max = np.max(self.node_c)
-            y_min = np.min(self.node_c)
-            inc = (y_max - y_min) * 0.001
-            node_bis = (self.node_c - y_min) / (y_max + inc - y_min) * ncol
+            node_y_max = np.max(self.node_c)
+            node_y_min = np.min(self.node_c)
+            inc = (node_y_max - y_min) * 0.001
+            node_bis = (self.node_c - y_min) / (node_y_max + inc - node_y_min) * ncol
             self.node_bis = np.array(node_bis, dtype=int)
 
         if self.ele_c is not None:
-            cols = colors.get_colors(self.color_scheme)
-            ecol = len(cols)
+            sch_cols = np.array(colors.get_colors(cscheme))
+            ecol = len(sch_cols)
             self.ele_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ecol)]
             active_eles = np.array(list(self.ele2node_tags)) - ele_num_base
             if self.cbal:
@@ -316,13 +329,22 @@ class FEMPlot(object):
             # TODO: use unique_bis = list(set(self.ele_bis)); unique_bis.sort()
             self.p_items = {}
             for i, mat in enumerate(self.mat2node_tags):
-                self.plotItem.removeItem(self.ele_lines_plot[mat])
+                self.win.removeItem(self.ele_lines_plot[mat])
                 self.p_items[mat] = {}
                 for bi in unique_bis:
                     brush = pg.mkBrush(self.ele_brush_list[bi])
 
-                    self.p_items[mat][bi] = self.plotItem.plot([], [], pen='w', connect=[], fillLevel='enclosed',
+                    self.p_items[mat][bi] = self.win.plot([], [], pen='w', connect=[], fillLevel='enclosed',
                                                                   fillBrush=brush)
+        if self.ele_c is not None and len(ele_c.shape) != 3:
+            lut = np.zeros((155, 3), dtype=np.ubyte)
+            lut[:, 0] = np.arange(100, 255)
+            lut = np.array([colors.color_by_index(cscheme, i, as255=True) for i in range(ecol)], dtype=int)
+            leg_copts = {
+                'leg_pen': leg_pen
+            }
+            o3ptools.add_color_bar(self.win, self.plotItem, lut, vmin=y_min, vmax=y_max,
+                                   label=clabel, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
 
         self.timer.timeout.connect(self.updater)
 
