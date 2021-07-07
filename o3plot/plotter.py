@@ -66,26 +66,45 @@ class FEMGUI(QtGui.QWidget):
         self.app = QtGui.QApplication(sys.argv)
         super(FEMGUI, self).__init__()
 
+        self.o3res = None
+        self.xmag = 1
+        self.ymag = 1
+        self.t_scale = 1
+
         self.setWindowTitle('FEM viewer')
 
         self.mainLayout = QtWidgets.QVBoxLayout()
         self.setLayout(self.mainLayout)
-        hbox = self.mainLayout
+        hbox = QtWidgets.QGroupBox()
+        hboxlay = QtWidgets.QHBoxLayout()
+        hbox.setLayout(hboxlay)
+        self.mainLayout.addWidget(hbox)
 
         self.reset_timer_button = QtGui.QPushButton("Reset timer")
         self.pause_button = QtGui.QPushButton("Pause/Resume")
-        self.step_forward_button = QtGui.QPushButton("+1 step")
+        self.step10_backward_button = QtGui.QPushButton("-10 steps")
         self.step_backward_button = QtGui.QPushButton("-1 step")
+        self.step_forward_button = QtGui.QPushButton("+1 step")
+        self.step10_forward_button = QtGui.QPushButton("+10 steps")
 
-        hbox.addWidget(self.reset_timer_button)
-        hbox.addWidget(self.pause_button)
-        hbox.addWidget(self.step_forward_button)
-        hbox.addWidget(self.step_backward_button)
+        hboxlay.addWidget(self.reset_timer_button)
+        hboxlay.addWidget(self.pause_button)
+        hboxlay.addWidget(self.step10_backward_button)
+        hboxlay.addWidget(self.step_backward_button)
+        hboxlay.addWidget(self.step_forward_button)
+        hboxlay.addWidget(self.step10_forward_button)
+
+        self.cb = QtGui.QComboBox()
+        # self.cb.addItem("Nothing detected")
+        self.cb.currentIndexChanged.connect(self.selectionchange)
+        hboxlay.addWidget(self.cb)
+
         self.qt_connections()
 
         self.win = pg.PlotWidget()
+        self.win.i_limit = 1e10
 
-        hbox.addWidget(self.win)
+        self.mainLayout.addWidget(self.win)
         self.hbox = hbox
 
         self.setGeometry(10, 10, 1000, 600)
@@ -96,11 +115,15 @@ class FEMGUI(QtGui.QWidget):
         self.fem_plot = FEMPlot(self.win, self.timer, copts=copts)
         self.show()
 
+    def add_ele_dict(self, ele_dict):
+        self.cb.addItems(list(ele_dict['4-all']))
+
     def init_model(self, coords, ele2node_tags=None):
         self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
 
-    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
-        self.fem_plot.plot_dynamic(x, y, dt, xmag=xmag, ymag=ymag, node_c=node_c, ele_c=ele_c, t_scale=t_scale)
+    def plot_dynamic(self, node_c=None, ele_c=None):
+        self.fem_plot.plot_dynamic(self.o3res.x_disp, self.o3res.y_disp, self.o3res.dt, xmag=self.xmag,
+                                   ymag=self.ymag, node_c=node_c, ele_c=ele_c, t_scale=self.t_scale)
 
     def start(self):
         if not self.started:
@@ -131,11 +154,38 @@ class FEMGUI(QtGui.QWidget):
         self.fem_plot.i -= 2
         self.fem_plot.updater()
 
+    def on_step10_forward_clicked(self):
+        print('step forward clicked')
+        self.fem_plot.i = min(self.fem_plot.i + 9, self.win.i_limit)
+        self.fem_plot.updater()
+
+    def on_step10_backward_clicked(self):
+        print('step backward clicked')
+        self.fem_plot.i -= 11
+        self.fem_plot.updater()
+
     def qt_connections(self):
         self.reset_timer_button.clicked.connect(self.reset_timer)
         self.pause_button.clicked.connect(self.pause)
         self.step_forward_button.clicked.connect(self.on_step_forward_clicked)
         self.step_backward_button.clicked.connect(self.on_step_backward_clicked)
+        self.step10_forward_button.clicked.connect(self.on_step10_forward_clicked)
+        self.step10_backward_button.clicked.connect(self.on_step10_backward_clicked)
+
+    def selectionchange(self, i):
+        if not len(self.cb) or self.o3res is None:
+            return
+        name = self.cb.currentText()
+        print("Current index", i, "selection changed ", )
+        # TODO: need to populate the whole ele_c matrix? not just 4-all
+        ele_c = np.zeros((len(self.fem_plot.ele2node_tags), len(self.o3res.x_disp)))
+        # cant plot stresses since it is trying to plot structural element loads too
+        vals4 = self.o3res.ele_dict['4-all'][name]
+
+        ele_c[self.fem_plot.mat2ele['4-all']] = vals4
+        self.fem_plot.change_ele_c(ele_c=ele_c)
+        self.fem_plot.i -= 1
+        self.fem_plot.updater()
 
 
 class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
@@ -167,27 +217,9 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
             self.raise_()
             self.app.exec_()
 
-    # def stop(self):
-    #     print('Exit')
-    #     self.status = False
-    #     self.app.close()
-    #     pg.close()
-
 def mouseMoved(event):
     print('Mouse moved 1')
 
-# def update():
-#     region.setZValue(10)
-#     minX, maxX = region.getRegion()
-#     p1.setXRange(minX, maxX, padding=0)
-#
-# region.sigRegionChanged.connect(update)
-#
-# def updateRegion(window, viewRange):
-#     rgn = viewRange[0]
-#     region.setRegion(rgn)
-#
-# p1.sigRangeChanged.connect(updateRegion)
 
 class FEMPlot(object):
     selected_nodes = None
@@ -227,15 +259,11 @@ class FEMPlot(object):
         # proxy = pg.SignalProxy(self.win.scene().sigMouseClicked, rateLimit=60, slot=self.on_double_click_out)
 
     def mouse_clicked(self, event):
-        # print('view box')
-        # print(self.win.plotItem.vb.itemBoundingRect)
         mouseEvent = event
         mousePoint = mouseEvent.pos()
         if mouseEvent.double():
             print("Double click")
         if self.win.sceneBoundingRect().contains(mousePoint):
-            # obj = self.win.plotItem.vb.mapFromScene(mousePoint)
-            # coords = self.win.plotItem.vb.mapToView(obj)
             mousePoint = self.win.plotItem.vb.mapToView(mousePoint)
             # mousePoint = self.win.plotItem.vb.mapSceneToView(mousePoint)  # Not working
             xp = mousePoint.x()
@@ -252,14 +280,6 @@ class FEMPlot(object):
 
     def mouseMoved(self, event):
         print('Mouse moved')
-    # def on_double_click_out(self, event):
-    #     mouseEvent = event
-    #     mousePoint = mouseEvent.pos()
-    #     if mouseEvent.double():
-    #         print("Double click")
-    #     if self.win.sceneBoundingRect().contains(mousePoint):
-    #         mousePoint = self.win.mapSceneToView(mousePoint)
-    #         print('x=', mousePoint.x(), ' y=', mousePoint.y())
 
     @property
     def mat2ele(self):
@@ -267,8 +287,6 @@ class FEMPlot(object):
 
     @mat2ele.setter
     def mat2ele(self, m2e_list):
-
-        # self._mat2ele = bidict(m2e_dict)
         for line in m2e_list:
             if line[0] not in self._mat2ele:
                 self._mat2ele[line[0]] = []
@@ -362,7 +380,6 @@ class FEMPlot(object):
 
         leg_pen = self.copts.setdefault('leg_pen', 'w')
         cscheme = self.copts.setdefault('scheme', 'red2yellow')
-        cscheme = self.color_scheme
         cbal = self.copts.setdefault('bal', 0)
         cunits = self.copts.setdefault('units', '')
         clabel = self.copts.setdefault('clabel', 'vals')
@@ -378,6 +395,7 @@ class FEMPlot(object):
             self.y += self.y_coords
 
         self.time = np.arange(len(self.x)) * dt
+        self.win.i_limit = len(self.x) - 1
 
         # Prepare node colors
         if self.node_c is not None:
@@ -423,6 +441,8 @@ class FEMPlot(object):
 
                     self.p_items[mat][bi] = self.win.plot([], [], pen='w', connect=[], fillLevel='enclosed',
                                                                   fillBrush=brush)
+        if hasattr(self, 'col_bar'):
+            self.win.removeItem(self.col_bar)
         if self.ele_c is not None and len(ele_c.shape) != 3:
             lut = np.zeros((155, 3), dtype=np.ubyte)
             lut[:, 0] = np.arange(100, 255)
@@ -430,10 +450,53 @@ class FEMPlot(object):
             leg_copts = {
                 'leg_pen': leg_pen
             }
-            o3ptools.add_color_bar(self.win, self.plotItem, lut, vmin=y_min, vmax=y_max,
+            self.col_bar = o3ptools.add_color_bar(self.win, self.plotItem, lut, vmin=y_min, vmax=y_max,
                                    label=clabel, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
-
         self.timer.timeout.connect(self.updater)
+
+    def change_ele_c(self, ele_c, ele_num_base=0):
+        leg_pen = self.copts.setdefault('leg_pen', 'w')
+        cscheme = self.copts.setdefault('scheme', 'red2yellow')
+        cscheme = self.color_scheme
+        cbal = self.copts.setdefault('bal', 0)
+        cunits = self.copts.setdefault('units', '')
+        clabel = self.copts.setdefault('clabel', 'vals')
+
+        self.ele_c = ele_c
+        if self.ele_c is not None:
+            sch_cols = np.array(colors.get_colors(cscheme))
+            ecol = len(sch_cols)
+            self.ele_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ecol)]
+            active_eles = np.array(list(self.ele2node_tags)) - ele_num_base
+            if self.cbal:
+                mabs = np.max(abs(self.ele_c[active_eles]))
+                y_max = mabs
+                y_min = -mabs
+            else:
+                y_max = np.max(self.ele_c[active_eles])
+                y_min = np.min(self.ele_c[active_eles])
+            if self.cinc:
+                y_max = np.ceil(y_max / self.cinc) * self.cinc
+                y_min = np.floor(y_min / self.cinc) * self.cinc
+
+            inc = (y_max - y_min) * 0.001
+            print('ymin, ymax: ', y_min, y_max)
+
+            ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
+            self.ele_bis = np.array(ele_bis, dtype=int)
+            unique_bis = np.arange(ecol)
+
+        if hasattr(self, 'col_bar'):
+            self.win.removeItem(self.col_bar)
+        if self.ele_c is not None and len(ele_c.shape) != 3:
+            lut = np.zeros((155, 3), dtype=np.ubyte)
+            lut[:, 0] = np.arange(100, 255)
+            lut = np.array([colors.color_by_index(cscheme, i, as255=True) for i in range(ecol)], dtype=int)
+            leg_copts = {
+                'leg_pen': leg_pen
+            }
+            self.col_bar = o3ptools.add_color_bar(self.win, self.plotItem, lut, vmin=y_min, vmax=y_max,
+                                   label=clabel, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
 
     def updater(self):
 
@@ -794,12 +857,17 @@ def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, copts=None):
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
+    if hasattr(o3res, 'ele_dict'):
+        win.add_ele_dict(o3res.ele_dict)
     win.fem_plot.show_nodes = show_nodes
     win.init_model(o3res.coords, o3res.ele2node_tags)
+    win.o3res = o3res
+    win.xmag = xmag
+    win.ymag = ymag
+    win.t_scale = t_scale
 
     if o3res.dynamic:
-        win.plot_dynamic(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag,
-                         ymag=ymag, t_scale=t_scale)
+        win.plot_dynamic(node_c=o3res.node_c, ele_c=o3res.ele_c)
     win.start()
 
 

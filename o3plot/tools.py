@@ -60,6 +60,7 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
     main_layout.addItem(axis_item, 0, 2)
     overlay_vb.setParentItem(col_scale_vb.parentItem())
     col_scale_vb.setRange(xRange=[0, bar_width], yRange=[0, n_cols], padding=0.0, update=False, disableAutoRange=True)
+    return pg_wid
 
 
 def _load_mod_dat():
