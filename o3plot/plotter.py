@@ -10,6 +10,36 @@ import os
 from o3plot import tools as o3ptools
 
 
+def calc_quad_ele_centroids(x_nodes, y_nodes, quad_ele_nodes):
+    x_inds = []
+    y_inds = []
+    n_eles = len(np.array(quad_ele_nodes))
+    ele_node_inds = np.array(quad_ele_nodes).flatten()
+
+    x0 = np.array(x_nodes[ele_node_inds])
+    y0 = np.array(y_nodes[ele_node_inds])
+    x0 = x0.reshape((n_eles, 4))
+    y0 = y0.reshape((n_eles, 4))
+
+    x1 = np.roll(x0, 1, axis=-1)
+    y1 = np.roll(y0, 1, axis=-1)
+    a = x0 * y1 - x1 * y0
+    xc = np.sum((x0 + x1) * a, axis=-1)
+    yc = np.sum((y0 + y1) * a, axis=-1)
+
+    area = 0.5 * np.sum(a, axis=-1)
+    xc /= (6.0*area)
+    yc /= (6.0*area)
+
+    return xc, yc
+
+
+
+def get_nearest_xy_ind(xs, ys, x_point, y_point):
+    distance = (ys - y_point) ** 2 + (xs - x_point) ** 2
+    return np.argmin(distance)
+
+
 class bidict(dict):  # unused?
     def __init__(self, *args, **kwargs):
         super(bidict, self).__init__(*args, **kwargs)
@@ -43,7 +73,7 @@ class FEMGUI(QtGui.QWidget):
         hbox = self.mainLayout
 
         self.reset_timer_button = QtGui.QPushButton("Reset timer")
-        self.pause_button = QtGui.QPushButton("Pause")
+        self.pause_button = QtGui.QPushButton("Pause/Resume")
         self.step_forward_button = QtGui.QPushButton("+1 step")
         self.step_backward_button = QtGui.QPushButton("-1 step")
 
@@ -54,7 +84,7 @@ class FEMGUI(QtGui.QWidget):
         self.qt_connections()
 
         self.win = pg.PlotWidget()
-        self.win.scene().sigMouseClicked.connect(self.mouse_clicked)
+
         hbox.addWidget(self.win)
         self.hbox = hbox
 
@@ -69,9 +99,6 @@ class FEMGUI(QtGui.QWidget):
     def init_model(self, coords, ele2node_tags=None):
         self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
 
-    def mouse_clicked(self):
-        print('Mouse clicked')
-
     def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1):
         self.fem_plot.plot_dynamic(x, y, dt, xmag=xmag, ymag=ymag, node_c=node_c, ele_c=ele_c, t_scale=t_scale)
 
@@ -83,7 +110,11 @@ class FEMGUI(QtGui.QWidget):
 
     def pause(self):
         print('pause clicked')
-        self.timer.stop()
+        print('active: ', self.timer.isActive())
+        if self.timer.isActive():
+            self.timer.stop()
+        else:
+            self.timer.start()
 
     def reset_timer(self):
         self.fem_plot.i = 0
@@ -96,6 +127,7 @@ class FEMGUI(QtGui.QWidget):
         self.fem_plot.updater()
 
     def on_step_backward_clicked(self):
+        print('step backward clicked')
         self.fem_plot.i -= 2
         self.fem_plot.updater()
 
@@ -141,6 +173,21 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
     #     self.app.close()
     #     pg.close()
 
+def mouseMoved(event):
+    print('Mouse moved 1')
+
+# def update():
+#     region.setZValue(10)
+#     minX, maxX = region.getRegion()
+#     p1.setXRange(minX, maxX, padding=0)
+#
+# region.sigRegionChanged.connect(update)
+#
+# def updateRegion(window, viewRange):
+#     rgn = viewRange[0]
+#     region.setRegion(rgn)
+#
+# p1.sigRangeChanged.connect(updateRegion)
 
 class FEMPlot(object):
     selected_nodes = None
@@ -166,6 +213,7 @@ class FEMPlot(object):
         self.show_nodes = 1
         if copts is None:
             copts = {}
+        self.copts = copts
         self.win = win
 
         cscheme = copts.setdefault('scheme', 'red2yellow')
@@ -173,6 +221,45 @@ class FEMPlot(object):
         cunits = copts.setdefault('units', '')
         self.cinc = copts.setdefault('inc', None)
         self.color_scheme = cscheme
+        self.win.scene().sigMouseClicked.connect(self.mouse_clicked)
+        # proxy = pg.SignalProxy(self.win.sigMouseMoved, rateLimit=60, slot=mouseMoved)
+        # self.win.scene().sigMouseMoved.connect(self.mouseMoved)  # Too heavy, need rate limit
+        # proxy = pg.SignalProxy(self.win.scene().sigMouseClicked, rateLimit=60, slot=self.on_double_click_out)
+
+    def mouse_clicked(self, event):
+        # print('view box')
+        # print(self.win.plotItem.vb.itemBoundingRect)
+        mouseEvent = event
+        mousePoint = mouseEvent.pos()
+        if mouseEvent.double():
+            print("Double click")
+        if self.win.sceneBoundingRect().contains(mousePoint):
+            # obj = self.win.plotItem.vb.mapFromScene(mousePoint)
+            # coords = self.win.plotItem.vb.mapToView(obj)
+            mousePoint = self.win.plotItem.vb.mapToView(mousePoint)
+            # mousePoint = self.win.plotItem.vb.mapSceneToView(mousePoint)  # Not working
+            xp = mousePoint.x()
+            yp = mousePoint.y()
+            print('x-click=', xp, ' y-click=', yp)
+            xs = self.x[self.i - 1]  # minus 1 since i updates immediately after display
+            ys = self.y[self.i - 1]
+            ele_xs, ele_ys = calc_quad_ele_centroids(xs, ys, self.mat2node_tags[f'{4}-all']-1)
+            ind = get_nearest_xy_ind(ele_xs, ele_ys, xp, yp)
+            print('ele_x=', ele_xs[ind], ' ele_y=', ele_ys[ind])
+            quad_ele_c = self.ele_c[self.mat2ele['4-all'], self.i - 1]  # TODO: this should not be 2
+            print('ele_c value: ', quad_ele_c[ind])
+        print('Mouse clicked')
+
+    def mouseMoved(self, event):
+        print('Mouse moved')
+    # def on_double_click_out(self, event):
+    #     mouseEvent = event
+    #     mousePoint = mouseEvent.pos()
+    #     if mouseEvent.double():
+    #         print("Double click")
+    #     if self.win.sceneBoundingRect().contains(mousePoint):
+    #         mousePoint = self.win.mapSceneToView(mousePoint)
+    #         print('x=', mousePoint.x(), ' y=', mousePoint.y())
 
     @property
     def mat2ele(self):
@@ -236,7 +323,7 @@ class FEMPlot(object):
 
             if not len(self.mat2ele):  # then arrange by node len
                 for ele in self.ele2node_tags:
-                    n = len(self.ele2node_tags[ele]) - 1
+                    n = len(self.ele2node_tags[ele]) # - 1
                     if f'{n}-all' not in self.mat2ele:
                         self.mat2ele[f'{n}-all'] = []
                     self.mat2ele[f'{n}-all'].append(ele)
@@ -272,13 +359,13 @@ class FEMPlot(object):
         self.win.disableAutoRange()
 
     def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1, ele_num_base=0):
-        copts = {}
-        leg_pen = copts.setdefault('leg_pen', 'w')
-        cscheme = copts.setdefault('scheme', 'red2yellow')
+
+        leg_pen = self.copts.setdefault('leg_pen', 'w')
+        cscheme = self.copts.setdefault('scheme', 'red2yellow')
         cscheme = self.color_scheme
-        cbal = copts.setdefault('bal', 0)
-        cunits = copts.setdefault('units', '')
-        clabel = copts.setdefault('clabel', 'vals')
+        cbal = self.copts.setdefault('bal', 0)
+        cunits = self.copts.setdefault('units', '')
+        clabel = self.copts.setdefault('clabel', 'vals')
 
         self.timer.setInterval(1000. * dt * t_scale)  # in milliseconds
         self.timer.start()
@@ -300,8 +387,8 @@ class FEMPlot(object):
 
             node_y_max = np.max(self.node_c)
             node_y_min = np.min(self.node_c)
-            inc = (node_y_max - y_min) * 0.001
-            node_bis = (self.node_c - y_min) / (node_y_max + inc - node_y_min) * ncol
+            inc = (node_y_max - node_y_min) * 0.001
+            node_bis = (self.node_c - node_y_min) / (node_y_max + inc - node_y_min) * ncol
             self.node_bis = np.array(node_bis, dtype=int)
 
         if self.ele_c is not None:
@@ -351,7 +438,10 @@ class FEMPlot(object):
     def updater(self):
 
         if self.i == len(self.time) - 1:
-            self.timer.stop()
+            if not self.timer.isActive():
+                self.timer = 0  # allow looping if using stepper.
+            else:
+                self.timer.stop()
             return
         if self.ele_c is not None:
             return self.updater_w_ele_c()
@@ -377,7 +467,7 @@ class FEMPlot(object):
             ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
             self.ele_lines_plot[mat].setData(ele_x_coords, ele_y_coords, pen=pen, connect=self.ele_connects[mat].flatten(),
                                          fillLevel='enclosed', fillBrush=brush)
-        self.plotItem.setTitle(f"Nodes time: {self.time[self.i]:.4g}s")
+        self.plotItem.setTitle(f"Time: {self.time[self.i]:.4g}s")
         self.i = self.i + 1
 
     def updater_w_ele_c(self):
@@ -417,6 +507,7 @@ class FEMPlot(object):
                                          fillLevel='enclosed', fillBrush=brush)
                 else:
                     self.p_items[mat][bi].setData([], [])
+        self.plotItem.setTitle(f"Time: {self.time[self.i]:.4g}s")
         self.i = self.i + 1
 
 

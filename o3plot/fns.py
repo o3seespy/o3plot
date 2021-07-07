@@ -71,3 +71,15 @@ def renumber_nodes_and_eles(o3res):  # if selected nodes used
         o3res.ele_c = o3res.ele_c[np.array(eles_selected)]
 
 
+def get_nearest_xy_ind(xs, ys, x_point, y_point):
+    try:
+        import scipy.spatial
+    except ImportError as e:
+        distance = (ys - y_point) ** 2 + (xs - x_point) ** 2
+        ind = np.where(distance == distance.min())[0]
+        return ind
+    combo_xys = np.dstack([ys.ravel(), xs.ravel()])[0]
+    pt = [x_point, y_point]
+    distance, index = scipy.spatial.KDTree(combo_xys).query(pt)
+    return index
+
