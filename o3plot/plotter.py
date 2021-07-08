@@ -1,3 +1,4 @@
+import bwplot.colors
 from PyQt5 import QtCore, QtWidgets
 from pyqtgraph.Qt import QtGui
 import sys
@@ -73,12 +74,13 @@ class FEMGUI(QtGui.QWidget):
 
         self.setWindowTitle('FEM viewer')
 
-        self.mainLayout = QtWidgets.QVBoxLayout()
+        self.mainLayout = QtGui.QGridLayout()
+        # self.mainLayout = QtWidgets.QVBoxLayout()
         self.setLayout(self.mainLayout)
         hbox = QtWidgets.QGroupBox()
         hboxlay = QtWidgets.QHBoxLayout()
         hbox.setLayout(hboxlay)
-        self.mainLayout.addWidget(hbox)
+        self.mainLayout.addWidget(hbox, 0, 0)
 
         self.reset_timer_button = QtGui.QPushButton("Reset timer")
         self.pause_button = QtGui.QPushButton("Pause/Resume")
@@ -95,7 +97,7 @@ class FEMGUI(QtGui.QWidget):
         hboxlay.addWidget(self.step10_forward_button)
 
         self.cb = QtGui.QComboBox()
-        # self.cb.addItem("Nothing detected")
+        self.cb.addItem("Default")
         self.cb.currentIndexChanged.connect(self.selectionchange)
         hboxlay.addWidget(self.cb)
 
@@ -104,7 +106,9 @@ class FEMGUI(QtGui.QWidget):
         self.win = pg.PlotWidget()
         self.win.i_limit = 1e10
 
-        self.mainLayout.addWidget(self.win)
+        self.mainLayout.addWidget(self.win, 1, 0)
+        self.generate_col_box()
+        self.mainLayout.addWidget(self.col_box, 1, 1)
         self.hbox = hbox
 
         self.setGeometry(10, 10, 1000, 600)
@@ -114,9 +118,21 @@ class FEMGUI(QtGui.QWidget):
         # self.plotItem = self.plotwidget.addPlot(title="Nodes")
         self.fem_plot = FEMPlot(self.win.plotItem, self.timer, copts=copts)
         self.show()
+        self.curr_pm = 'Default'
+        self.copts_eles = {'4-all': {'Default': {}}}
 
     def add_ele_dict(self, ele_dict):
+        defualt_copts = {
+            'scheme': bwplot.colors.RED2YELLOWWHITE,
+            'bal': 0,
+            'units': 'kPa',
+            'inc': None,
+        }
         self.cb.addItems(list(ele_dict['4-all']))
+        for pm in ele_dict['4-all']:
+            self.copts_eles['4-all'][pm] = {'label': pm}
+            for item in defualt_copts:
+                self.copts_eles['4-all'][pm][item] = defualt_copts[item]
 
     def init_model(self, coords, ele2node_tags=None):
         self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
@@ -175,17 +191,68 @@ class FEMGUI(QtGui.QWidget):
     def selectionchange(self, i):
         if not len(self.cb) or self.o3res is None:
             return
-        name = self.cb.currentText()
+        pm = self.cb.currentText()
         print("Current index", i, "selection changed ", )
         # TODO: need to populate the whole ele_c matrix? not just 4-all
         ele_c = np.zeros((len(self.fem_plot.ele2node_tags), len(self.o3res.x_disp)))
         # cant plot stresses since it is trying to plot structural element loads too
-        vals4 = self.o3res.ele_dict['4-all'][name]
-        self.fem_plot.copts['clabel'] = name
+        vals4 = self.o3res.ele_dict['4-all'][pm]
+
         ele_c[self.fem_plot.mat2ele['4-all']] = vals4
-        self.fem_plot.change_ele_c(ele_c=ele_c)
+        self.fem_plot.ele_c = ele_c
+        self.curr_pm = pm
+        self.change_col_box_inputs()
+        self.change_ele_c()
+
+    def change_col_box_inputs(self):
+        if self.copts_eles['4-all'][self.curr_pm]['bal']:
+            self.bal_box.setChecked(True)
+        else:
+            self.bal_box.setChecked(False)
+        scheme = self.copts_eles['4-all'][self.curr_pm]['scheme']
+        # self.col_option_box.setCurrentText(scheme)
+        index = self.col_option_box.findText(scheme, flags=QtCore.Qt.MatchCaseSensitive)
+        if index >= 0:
+            self.col_option_box.setCurrentIndex(index)
+
+    def change_ele_c(self):
+        ele_copts = self.copts_eles['4-all'][self.curr_pm]
+        self.fem_plot.copts['label'] = ele_copts.setdefault('label', self.curr_pm)
+        self.fem_plot.copts['scheme'] = ele_copts.setdefault('scheme', colors.RED2WHITE2BLUE_STR)
+        self.fem_plot.copts['inc'] = ele_copts.setdefault('inc', None)
+        self.fem_plot.copts['bal'] = ele_copts.setdefault('bal', 0)
+        self.fem_plot.change_curr_ele_c()
         self.fem_plot.i -= 1
+        print('scheme: ', self.fem_plot.copts['scheme'])
         self.fem_plot.updater()
+
+
+    def generate_col_box(self):
+        col_box = QtWidgets.QGroupBox()
+        col_vboxlay = QtWidgets.QVBoxLayout()
+        col_box.setLayout(col_vboxlay)
+        self.text_box = QtGui.QTextItem()
+        # col_vboxlay.addWidget(self.text_box)
+        self.col_option_box = QtGui.QComboBox()
+        self.col_option_box.addItems(colors.COLOR_SCHEMES)
+        self.col_option_box.currentIndexChanged.connect(self.col_box_selection_changed)
+        col_vboxlay.addWidget(self.col_option_box)
+        self.bal_box = QtGui.QCheckBox("Balanced?")
+        col_vboxlay.addWidget(self.bal_box)
+        self.bal_box.stateChanged.connect(self.clicked_bal_box)
+        self.col_box = col_box
+
+    def col_box_selection_changed(self):
+        col = self.col_option_box.currentText()
+        self.copts_eles['4-all'][self.curr_pm]['scheme'] = col
+        self.change_ele_c()
+
+    def clicked_bal_box(self, state):
+        if state == QtCore.Qt.Checked:
+            self.copts_eles['4-all'][self.curr_pm]['bal'] = 1
+        else:
+            self.copts_eles['4-all'][self.curr_pm]['bal'] = 0
+        self.change_ele_c()
 
 
 class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
@@ -264,7 +331,7 @@ class FEMPlot(object):
         if mouseEvent.double():
             print("Double click")
         if self.win.sceneBoundingRect().contains(mousePoint):
-            mousePoint = self.win.plotItem.vb.mapToView(mousePoint)
+            mousePoint = self.win.vb.mapToView(mousePoint)
             # mousePoint = self.win.plotItem.vb.mapSceneToView(mousePoint)  # Not working
             xp = mousePoint.x()
             yp = mousePoint.y()
@@ -382,7 +449,7 @@ class FEMPlot(object):
         cscheme = self.copts.setdefault('scheme', 'red2yellow')
         cbal = self.copts.setdefault('bal', 0)
         cunits = self.copts.setdefault('units', '')
-        clabel = self.copts.setdefault('clabel', 'vals')
+        clabel = self.copts.setdefault('label', 'vals')
 
         self.timer.setInterval(1000. * dt * t_scale)  # in milliseconds
         self.timer.start()
@@ -456,15 +523,16 @@ class FEMPlot(object):
                                    label=clabel, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
         self.timer.timeout.connect(self.updater)
 
-    def change_ele_c(self, ele_c, ele_num_base=0):
+    def change_curr_ele_c(self, ele_num_base=0):
+        ele_c = self.ele_c
         leg_pen = self.copts.setdefault('leg_pen', 'w')
         cscheme = self.copts.setdefault('scheme', 'red2yellow')
-        cscheme = self.color_scheme
-        cbal = self.copts.setdefault('bal', 0)
+        self.color_scheme = cscheme
+        self.cbal = self.copts.setdefault('bal', 0)
         cunits = self.copts.setdefault('units', '')
-        clabel = self.copts.setdefault('clabel', 'vals')
+        clabel = self.copts.setdefault('label', 'vals')
+        print('selected scheme: ', cscheme)
 
-        self.ele_c = ele_c
         if self.ele_c is not None:
             sch_cols = np.array(colors.get_colors(cscheme))
             ecol = len(sch_cols)
@@ -500,7 +568,7 @@ class FEMPlot(object):
                 'leg_pen': leg_pen
             }
             self.col_bar = o3ptools.add_color_bar(self.win, self.plotItem, lut, vmin=y_min, vmax=y_max,
-                                   label=clabel, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
+                                   label=clabel, n_cols=ecol, units=cunits, bal=self.cbal, copts=leg_copts)
 
     def updater(self):
 
