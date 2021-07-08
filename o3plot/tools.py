@@ -28,8 +28,8 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
     col_scale_vb.addItem(color_scale_image_item)
     col_scale_vb.setZValue(101)
 
-    overlay_vb = pg.ViewBox(enableMenu=False)
-    overlay_vb.setZValue(100)
+    # overlay_vb = pg.ViewBox(enableMenu=False)
+    # overlay_vb.setZValue(100)
 
     axis_item = pg.AxisItem(orientation='right', showValues=True, width=400)
     axis_item.setRange(vmin, vmax)
@@ -54,11 +54,12 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
     # geom = view.getGeometry()
     pg_wid.setLayout(main_layout)
     pg_wid.setGeometry(50, 5, 220, 50)
+    # view.addItem(pg_wid)
     main_layout.setContentsMargins(10, 10, 10, 0)
     main_layout.setSpacing(0)
     main_layout.addItem(col_scale_vb, 0, 1)
     main_layout.addItem(axis_item, 0, 2)
-    overlay_vb.setParentItem(col_scale_vb.parentItem())
+    # overlay_vb.setParentItem(col_scale_vb.parentItem())
     col_scale_vb.setRange(xRange=[0, bar_width], yRange=[0, n_cols], padding=0.0, update=False, disableAutoRange=True)
     return pg_wid
 

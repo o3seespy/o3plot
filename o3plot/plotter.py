@@ -112,7 +112,7 @@ class FEMGUI(QtGui.QWidget):
         self.timer = QtCore.QTimer(self)
 
         # self.plotItem = self.plotwidget.addPlot(title="Nodes")
-        self.fem_plot = FEMPlot(self.win, self.timer, copts=copts)
+        self.fem_plot = FEMPlot(self.win.plotItem, self.timer, copts=copts)
         self.show()
 
     def add_ele_dict(self, ele_dict):
@@ -181,7 +181,7 @@ class FEMGUI(QtGui.QWidget):
         ele_c = np.zeros((len(self.fem_plot.ele2node_tags), len(self.o3res.x_disp)))
         # cant plot stresses since it is trying to plot structural element loads too
         vals4 = self.o3res.ele_dict['4-all'][name]
-
+        self.fem_plot.copts['clabel'] = name
         ele_c[self.fem_plot.mat2ele['4-all']] = vals4
         self.fem_plot.change_ele_c(ele_c=ele_c)
         self.fem_plot.i -= 1
@@ -225,7 +225,7 @@ class FEMPlot(object):
     selected_nodes = None
 
     def __init__(self, win, timer, copts=None):
-        self.plotItem = win.plotItem
+        self.plotItem = win
         self.timer = timer
         self.x_coords = None
         self.y_coords = None
@@ -442,7 +442,9 @@ class FEMPlot(object):
                     self.p_items[mat][bi] = self.win.plot([], [], pen='w', connect=[], fillLevel='enclosed',
                                                                   fillBrush=brush)
         if hasattr(self, 'col_bar'):
-            self.win.removeItem(self.col_bar)
+            print('removing color bar')
+            self.col_bar.setParent(None)
+            self.col_bar.close()
         if self.ele_c is not None and len(ele_c.shape) != 3:
             lut = np.zeros((155, 3), dtype=np.ubyte)
             lut[:, 0] = np.arange(100, 255)
@@ -487,7 +489,9 @@ class FEMPlot(object):
             unique_bis = np.arange(ecol)
 
         if hasattr(self, 'col_bar'):
-            self.win.removeItem(self.col_bar)
+            print('removing color bar')
+            # self.col_bar.setParent(None)
+            self.col_bar.close()
         if self.ele_c is not None and len(ele_c.shape) != 3:
             lut = np.zeros((155, 3), dtype=np.ubyte)
             lut[:, 0] = np.arange(100, 255)
