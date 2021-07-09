@@ -193,12 +193,12 @@ class FEMGUI(QtGui.QWidget):
             return
         pm = self.cb.currentText()
         print("Current index", i, "selection changed ", )
-        # TODO: need to populate the whole ele_c matrix? not just 4-all
-        ele_c = np.zeros((len(self.fem_plot.ele2node_tags), len(self.o3res.x_disp)))
-        # cant plot stresses since it is trying to plot structural element loads too
-        vals4 = self.o3res.ele_dict['4-all'][pm]
-
-        ele_c[self.fem_plot.mat2ele['4-all']] = vals4
+        if pm == 'Default':
+            ele_c = self.o3res.ele_c
+        else:
+            vals4 = self.o3res.ele_dict['4-all'][pm]
+            ele_c = np.zeros((len(self.fem_plot.ele2node_tags), len(self.o3res.x_disp)))
+            ele_c[self.fem_plot.mat2ele['4-all']] = vals4
         self.fem_plot.ele_c = ele_c
         self.curr_pm = pm
         self.change_col_box_inputs()
@@ -496,6 +496,7 @@ class FEMPlot(object):
             print('ymin, ymax: ', y_min, y_max)
 
             ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
+            ele_bis = np.clip(ele_bis, 0, ecol - 1)
             self.ele_bis = np.array(ele_bis, dtype=int)
             unique_bis = np.arange(ecol)
             # TODO: use unique_bis = list(set(self.ele_bis)); unique_bis.sort()
@@ -534,7 +535,7 @@ class FEMPlot(object):
         print('selected scheme: ', cscheme)
 
         if self.ele_c is not None:
-            sch_cols = np.array(colors.get_colors(cscheme))
+            sch_cols = np.array(colors.get_colors(self.color_scheme))
             ecol = len(sch_cols)
             self.ele_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ecol)]
             active_eles = np.array(list(self.ele2node_tags)) - ele_num_base
@@ -553,8 +554,25 @@ class FEMPlot(object):
             print('ymin, ymax: ', y_min, y_max)
 
             ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
+            ele_bis = np.clip(ele_bis, 0, ecol - 1)
             self.ele_bis = np.array(ele_bis, dtype=int)
             unique_bis = np.arange(ecol)
+        else:
+            unique_bis = []
+        # clean plots
+        print('ecol: ', ecol)
+        for i, mat in enumerate(self.mat2node_tags):
+            for bi in range(100):
+                if bi not in unique_bis:
+                    if bi in self.p_items[mat]:
+                        self.win.removeItem(self.p_items[mat][bi])
+                        del self.p_items[mat][bi]
+                    continue
+
+                if bi in unique_bis and bi not in self.p_items[mat]:
+                    brush = pg.mkBrush(self.ele_brush_list[bi])
+                    self.p_items[mat][bi] = self.win.plot([], [], pen='w', connect=[], fillLevel='enclosed',
+                                                      fillBrush=brush)
 
         if hasattr(self, 'col_bar'):
             print('removing color bar')
@@ -624,7 +642,6 @@ class FEMPlot(object):
                 pen = pg.mkPen([0, 0, 250, 80], width=0.7)
             else:
                 pen = pg.mkPen([200, 200, 200, 80], width=0.7)
-
             for bi in unique_bis:
                 inds = np.where(bis == bi)
                 if len(inds[0]):
@@ -639,7 +656,7 @@ class FEMPlot(object):
                     ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
                     ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
                     self.p_items[mat][bi].setData(ele_x_coords, ele_y_coords, pen=pen, connect=cons.flatten(),
-                                         fillLevel='enclosed', fillBrush=brush)
+                                         )
                 else:
                     self.p_items[mat][bi].setData([], [])
         self.plotItem.setTitle(f"Time: {self.time[self.i]:.4g}s")
@@ -692,7 +709,6 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b', xshift=0):
         fd = bd.fd
         fcx = tds.x_bds[i] + bd.x_fd
         fcy = np.interp(fcx, tds.x_surf, tds.y_surf)
-        print(fcx, fcy)
         x = np.array([fcx - fd.width / 2, fcx + fd.width / 2, fcx + fd.width / 2, fcx - fd.width / 2, fcx - fd.width / 2])
         y = [fcy - fd.depth, fcy - fd.depth, fcy - fd.depth + fd.height, fcy - fd.depth + fd.height, fcy - fd.depth]
         win.plot(x-xshift, y, pen=c2)
