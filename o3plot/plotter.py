@@ -405,7 +405,8 @@ class FEMPlot(object):
             self.mat2node_tags = {}
             if self.selected_nodes is not None:
                 self.renumber_nodes_and_eles()
-
+            for ele in self.ele2node_tags:
+                self.ele2node_tags[ele] = np.array(self.ele2node_tags[ele])
             if not len(self.mat2ele):  # then arrange by node len
                 for ele in self.ele2node_tags:
                     n = len(self.ele2node_tags[ele]) # - 1
@@ -498,6 +499,11 @@ class FEMPlot(object):
             ele_bis = (self.ele_c - y_min) / (y_max + inc - y_min) * ecol
             ele_bis = np.clip(ele_bis, 0, ecol - 1)
             self.ele_bis = np.array(ele_bis, dtype=int)
+            min_inds = np.argmin(self.ele_c[active_eles], axis=0)
+            self.min_inds = active_eles[min_inds]
+            max_inds = np.argmax(self.ele_c[active_eles], axis=0)
+            self.max_inds = active_eles[max_inds]
+
             unique_bis = np.arange(ecol)
             # TODO: use unique_bis = list(set(self.ele_bis)); unique_bis.sort()
             self.p_items = {}
@@ -509,6 +515,8 @@ class FEMPlot(object):
 
                     self.p_items[mat][bi] = self.win.plot([], [], pen='w', connect=[], fillLevel='enclosed',
                                                                   fillBrush=brush)
+        self.p_items['max'] = self.win.plot([], [], pen='r', connect=[], symbol='o', symbolBrush=(255, 0, 0), symbolSize=6)  # should be per material
+        self.p_items['min'] = self.win.plot([], [], pen='g', connect=[], symbol='o', symbolBrush=(0, 255, 0), symbolSize=6)
         if hasattr(self, 'col_bar'):
             print('removing color bar')
             self.col_bar.setParent(None)
@@ -557,10 +565,15 @@ class FEMPlot(object):
             ele_bis = np.clip(ele_bis, 0, ecol - 1)
             self.ele_bis = np.array(ele_bis, dtype=int)
             unique_bis = np.arange(ecol)
+            print('ecol: ', ecol)
+            min_inds = np.argmin(self.ele_c[active_eles], axis=0)
+            self.min_inds = active_eles[min_inds]
+            max_inds = np.argmax(self.ele_c[active_eles], axis=0)
+            self.max_inds = active_eles[max_inds]
         else:
             unique_bis = []
         # clean plots
-        print('ecol: ', ecol)
+
         for i, mat in enumerate(self.mat2node_tags):
             for bi in range(100):
                 if bi not in unique_bis:
@@ -633,7 +646,6 @@ class FEMPlot(object):
         elif self.show_nodes:
             self.node_points_plot.setData(self.x[self.i], self.y[self.i], brush='g', symbol='o')
 
-
         for i, mat in enumerate(self.mat2node_tags):
             bis = self.ele_bis[self.mat2ele[mat], self.i]
             unique_bis = np.arange(len(colors.get_colors(self.color_scheme)))
@@ -650,15 +662,23 @@ class FEMPlot(object):
                     r = self.mat2node_tags[mat][inds]
                     cons1 = self.ele_connects[mat]
                     cons = self.ele_connects[mat][inds]
-                    ele_x_coords1 = self.x[self.i][(self.mat2node_tags[mat] - 1)]
+                    # ele_x_coords1 = self.x[self.i][(self.mat2node_tags[mat] - 1)]
                     ele_x_coords = self.x[self.i][(self.mat2node_tags[mat][inds] - 1)]
                     ele_y_coords = (self.y[self.i])[(self.mat2node_tags[mat][inds] - 1)]
                     ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
                     ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
-                    self.p_items[mat][bi].setData(ele_x_coords, ele_y_coords, pen=pen, connect=cons.flatten(),
-                                         )
+                    self.p_items[mat][bi].setData(ele_x_coords, ele_y_coords, pen=pen, connect=cons.flatten())
                 else:
                     self.p_items[mat][bi].setData([], [])
+
+        elex = self.x[self.i][self.ele2node_tags[self.max_inds[self.i]] - 1]
+        eley = self.y[self.i][self.ele2node_tags[self.max_inds[self.i]] - 1]
+
+        self.p_items['max'].setData(np.insert(elex, len(elex), elex[0]), np.insert(eley, len(eley), eley[0]), connect='all')
+        elex = self.x[self.i][self.ele2node_tags[self.min_inds[self.i]] - 1]
+        eley = self.y[self.i][self.ele2node_tags[self.min_inds[self.i]] - 1]
+        self.p_items['min'].setData(np.insert(elex, len(elex), elex[0]), np.insert(eley, len(eley), eley[0]), connect='all')
+
         self.plotItem.setTitle(f"Time: {self.time[self.i]:.4g}s")
         self.i = self.i + 1
 
