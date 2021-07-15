@@ -126,6 +126,7 @@ class FEMGUI(QtGui.QWidget):
             'scheme': bwplot.colors.RED2YELLOWWHITE,
             'bal': 0,
             'units': 'kPa',
+            'crange': [None, None],
             'inc': None,
         }
         self.cb.addItems(list(ele_dict['4-all']))
@@ -214,6 +215,10 @@ class FEMGUI(QtGui.QWidget):
         index = self.col_option_box.findText(scheme, flags=QtCore.Qt.MatchCaseSensitive)
         if index >= 0:
             self.col_option_box.setCurrentIndex(index)
+        if self.copts_eles['4-all'][self.curr_pm]['crange'][0] is not None:
+            self.cmin.text = self.copts_eles['4-all'][self.curr_pm]['crange'][0]
+        if self.copts_eles['4-all'][self.curr_pm]['crange'][1] is not None:
+            self.cmax.text = self.copts_eles['4-all'][self.curr_pm]['crange'][1]
 
     def change_ele_c(self):
         ele_copts = self.copts_eles['4-all'][self.curr_pm]
@@ -221,6 +226,7 @@ class FEMGUI(QtGui.QWidget):
         self.fem_plot.copts['scheme'] = ele_copts.setdefault('scheme', colors.RED2WHITE2BLUE_STR)
         self.fem_plot.copts['inc'] = ele_copts.setdefault('inc', None)
         self.fem_plot.copts['bal'] = ele_copts.setdefault('bal', 0)
+        self.fem_plot.copts['crange'] = ele_copts.setdefault('crange', None)
         self.fem_plot.change_curr_ele_c()
         self.fem_plot.i -= 1
         print('scheme: ', self.fem_plot.copts['scheme'])
@@ -240,7 +246,17 @@ class FEMGUI(QtGui.QWidget):
         self.bal_box = QtGui.QCheckBox("Balanced?")
         col_vboxlay.addWidget(self.bal_box)
         self.bal_box.stateChanged.connect(self.clicked_bal_box)
+        self.cmin = QtGui.QLineEdit()
+        col_vboxlay.addWidget(self.cmin)
+        self.cmax = QtGui.QLineEdit()
+        col_vboxlay.addWidget(self.cmax)
+        self.crange_but = QtGui.QPushButton("Update range")
+        self.crange_but.clicked.connect(self.change_crange)
+        col_vboxlay.addWidget(self.crange_but)
+
+
         self.col_box = col_box
+
 
     def col_box_selection_changed(self):
         col = self.col_option_box.currentText()
@@ -252,6 +268,15 @@ class FEMGUI(QtGui.QWidget):
             self.copts_eles['4-all'][self.curr_pm]['bal'] = 1
         else:
             self.copts_eles['4-all'][self.curr_pm]['bal'] = 0
+        self.change_ele_c()
+
+    def change_crange(self):
+        val = self.cmin.text()
+        if val != '' or val is not None:
+            self.copts_eles['4-all'][self.curr_pm]['crange'][0] = float(val)
+        val = self.cmax.text()
+        if val != '' or val is not None:
+            self.copts_eles['4-all'][self.curr_pm]['crange'][1] = float(val)
         self.change_ele_c()
 
 
@@ -451,6 +476,7 @@ class FEMPlot(object):
         cbal = self.copts.setdefault('bal', 0)
         cunits = self.copts.setdefault('units', '')
         clabel = self.copts.setdefault('label', 'vals')
+        crange = self.copts.setdefault('crange', None)
 
         self.timer.setInterval(1000. * dt * t_scale)  # in milliseconds
         self.timer.start()
@@ -482,17 +508,24 @@ class FEMPlot(object):
             ecol = len(sch_cols)
             self.ele_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ecol)]
             active_eles = np.array(list(self.ele2node_tags)) - ele_num_base
-            if self.cbal:
-                mabs = np.max(abs(self.ele_c[active_eles]))
-                y_max = mabs
-                y_min = -mabs
+            if crange is None:
+                if self.cbal:
+                    mabs = np.max(abs(self.ele_c[active_eles]))
+                    y_max = mabs
+                    y_min = -mabs
+                else:
+                    y_max = np.max(self.ele_c[active_eles])
+                    y_min = np.min(self.ele_c[active_eles])
+                if self.cinc:
+                    y_max = np.ceil(y_max / self.cinc) * self.cinc
+                    y_min = np.floor(y_min / self.cinc) * self.cinc
             else:
-                y_max = np.max(self.ele_c[active_eles])
-                y_min = np.min(self.ele_c[active_eles])
-            if self.cinc:
-                y_max = np.ceil(y_max / self.cinc) * self.cinc
-                y_min = np.floor(y_min / self.cinc) * self.cinc
-
+                y_min = crange[0]
+                if y_min is None:
+                    y_min = np.min(self.ele_c[active_eles])
+                y_max = crange[1]
+                if y_max is None:
+                    y_max = np.max(self.ele_c[active_eles])
             inc = (y_max - y_min) * 0.001
             print('ymin, ymax: ', y_min, y_max)
 
@@ -540,6 +573,7 @@ class FEMPlot(object):
         self.cbal = self.copts.setdefault('bal', 0)
         cunits = self.copts.setdefault('units', '')
         clabel = self.copts.setdefault('label', 'vals')
+        crange = self.copts.setdefault('crange', None)
         print('selected scheme: ', cscheme)
 
         if self.ele_c is not None:
@@ -547,16 +581,24 @@ class FEMPlot(object):
             ecol = len(sch_cols)
             self.ele_brush_list = [pg.mkColor(colors.color_by_scheme(self.color_scheme, i, as255=True)) for i in range(ecol)]
             active_eles = np.array(list(self.ele2node_tags)) - ele_num_base
-            if self.cbal:
-                mabs = np.max(abs(self.ele_c[active_eles]))
-                y_max = mabs
-                y_min = -mabs
+            if crange is None:
+                if self.cbal:
+                    mabs = np.max(abs(self.ele_c[active_eles]))
+                    y_max = mabs
+                    y_min = -mabs
+                else:
+                    y_max = np.max(self.ele_c[active_eles])
+                    y_min = np.min(self.ele_c[active_eles])
+                if self.cinc:
+                    y_max = np.ceil(y_max / self.cinc) * self.cinc
+                    y_min = np.floor(y_min / self.cinc) * self.cinc
             else:
-                y_max = np.max(self.ele_c[active_eles])
-                y_min = np.min(self.ele_c[active_eles])
-            if self.cinc:
-                y_max = np.ceil(y_max / self.cinc) * self.cinc
-                y_min = np.floor(y_min / self.cinc) * self.cinc
+                y_min = crange[0]
+                if y_min is None:
+                    y_min = np.min(self.ele_c[active_eles])
+                y_max = crange[1]
+                if y_max is None:
+                    y_max = np.max(self.ele_c[active_eles])
 
             inc = (y_max - y_min) * 0.001
             print('ymin, ymax: ', y_min, y_max)
@@ -811,7 +853,11 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
                     y_min = np.floor(y_min / cinc) * cinc
             else:
                 y_min = crange[0]
+                if y_min is None:
+                    y_min = np.min(ele_c[active_eles])
                 y_max = crange[1]
+                if y_max is None:
+                    y_max = np.max(ele_c[active_eles])
             inc = (y_max - y_min) * 0.001
 
             for sl_ind in cd:
