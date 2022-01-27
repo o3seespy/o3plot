@@ -3,11 +3,15 @@ from pyqtgraph import QtCore, QtGui
 import numpy as np
 
 class ColorGrid(pg.GraphicsObject):
-    def __init__(self, xdata, ydata, brushes=None):
+    def __init__(self, xdata, ydata, brushes=None, pen_col=None):
         pg.GraphicsObject.__init__(self)
         self.xdata = xdata
         self.ydata = ydata
         self.brushes = brushes
+        if pen_col is None:
+            self.pen_col = (180, 180, 180)
+        else:
+            self.pen_col = pen_col
         self.generatePicture()
 
     def generatePicture(self):
@@ -17,7 +21,7 @@ class ColorGrid(pg.GraphicsObject):
         """
         self.picture = QtGui.QPicture()
         p = QtGui.QPainter(self.picture)
-        p.setPen(pg.mkPen((180, 180, 180)))
+        p.setPen(pg.mkPen(self.pen_col))
         for i in range(len(self.xdata)):
             path = pg.arrayToQPath(self.xdata[i], self.ydata[i])
             p2 = QtGui.QPainterPath(path)
@@ -45,9 +49,9 @@ class ColorGrid(pg.GraphicsObject):
 def run():
     x_all = []
     y_all = []
-    for j in range(100):
-        x = np.array([0, 1, 1, 0]) + j
-        y = np.array([0, 0, 1, 1]) + j
+    for j in range(10):
+        x = np.array([0, 1, 1, 0, 0]) + j * 2
+        y = np.array([0, 0, 1, 1, 0]) + j * 2
         x_all.append(x)
         y_all.append(y)
     x_all = np.array(x_all)

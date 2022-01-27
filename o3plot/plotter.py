@@ -240,7 +240,10 @@ class FEMGUI(QtGui.QWidget):
         self.text_box = QtGui.QTextItem()
         # col_vboxlay.addWidget(self.text_box)
         self.col_option_box = QtGui.QComboBox()
-        self.col_option_box.addItems(colors.COLOR_SCHEMES)
+        cols = colors.COLOR_SCHEMES
+        self.col_option_box.addItems(cols)
+        rev_cols = [f'{col}-rev' for col in cols]
+        self.col_option_box.addItems(rev_cols)
         self.col_option_box.currentIndexChanged.connect(self.col_box_selection_changed)
         col_vboxlay.addWidget(self.col_option_box)
         self.bal_box = QtGui.QCheckBox("Balanced?")
@@ -283,7 +286,7 @@ class FEMGUI(QtGui.QWidget):
 class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
     started = 0
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, title=''):
         self.app = QtWidgets.QApplication([])
         super().__init__(parent=parent)
         #
@@ -293,7 +296,7 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
         self.setLayout(self.mainLayout)
         self.timer = QtCore.QTimer(self)
 
-        self.plotItem = self.addPlot(title="Nodes")
+        self.plotItem = self.addPlot(title=title)
         self.fem_plot = FEMPlot(self.plotItem, self.timer)
 
     def init_model(self, coords, ele2node_tags=None):
@@ -339,6 +342,7 @@ class FEMPlot(object):
             copts = {}
         self.copts = copts
         self.win = win
+        self.show_maxmin = 0
 
         cscheme = copts.setdefault('scheme', 'red2yellow')
         self.cbal = copts.setdefault('bal', 0)
@@ -510,12 +514,12 @@ class FEMPlot(object):
             active_eles = np.array(list(self.ele2node_tags)) - ele_num_base
             if crange is None:
                 if self.cbal:
-                    mabs = np.max(abs(self.ele_c[active_eles]))
+                    mabs = np.nanmax(abs(self.ele_c[active_eles]))
                     y_max = mabs
                     y_min = -mabs
                 else:
-                    y_max = np.max(self.ele_c[active_eles])
-                    y_min = np.min(self.ele_c[active_eles])
+                    y_max = np.nanmax(self.ele_c[active_eles])
+                    y_min = np.nanmin(self.ele_c[active_eles])
                 if self.cinc:
                     y_max = np.ceil(y_max / self.cinc) * self.cinc
                     y_min = np.floor(y_min / self.cinc) * self.cinc
@@ -548,8 +552,9 @@ class FEMPlot(object):
 
                     self.p_items[mat][bi] = self.win.plot([], [], pen='w', connect=[], fillLevel='enclosed',
                                                                   fillBrush=brush)
-        self.p_items['max'] = self.win.plot([], [], pen='r', connect=[], symbol='o', symbolBrush=(255, 0, 0), symbolSize=6)  # should be per material
-        self.p_items['min'] = self.win.plot([], [], pen='g', connect=[], symbol='o', symbolBrush=(0, 255, 0), symbolSize=6)
+            if self.show_maxmin:
+                self.p_items['max'] = self.win.plot([], [], pen='r', connect=[], symbol='o', symbolBrush=(255, 0, 0), symbolSize=6)  # should be per material
+                self.p_items['min'] = self.win.plot([], [], pen='g', connect=[], symbol='o', symbolBrush=(0, 255, 0), symbolSize=6)
         if hasattr(self, 'col_bar'):
             print('removing color bar')
             self.col_bar.setParent(None)
@@ -561,6 +566,8 @@ class FEMPlot(object):
             leg_copts = {
                 'leg_pen': leg_pen
             }
+            print('y_min: ', y_min)
+            print('y_max: ', y_max)
             self.col_bar = o3ptools.add_color_bar(self.win, self.plotItem, lut, vmin=y_min, vmax=y_max,
                                    label=clabel, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
         self.timer.timeout.connect(self.updater)
@@ -583,22 +590,22 @@ class FEMPlot(object):
             active_eles = np.array(list(self.ele2node_tags)) - ele_num_base
             if crange is None:
                 if self.cbal:
-                    mabs = np.max(abs(self.ele_c[active_eles]))
+                    mabs = np.nanmax(abs(self.ele_c[active_eles]))
                     y_max = mabs
                     y_min = -mabs
                 else:
-                    y_max = np.max(self.ele_c[active_eles])
-                    y_min = np.min(self.ele_c[active_eles])
+                    y_max = np.nanmax(self.ele_c[active_eles])
+                    y_min = np.nanmin(self.ele_c[active_eles])
                 if self.cinc:
                     y_max = np.ceil(y_max / self.cinc) * self.cinc
                     y_min = np.floor(y_min / self.cinc) * self.cinc
             else:
                 y_min = crange[0]
                 if y_min is None:
-                    y_min = np.min(self.ele_c[active_eles])
+                    y_min = np.nanmin(self.ele_c[active_eles])
                 y_max = crange[1]
                 if y_max is None:
-                    y_max = np.max(self.ele_c[active_eles])
+                    y_max = np.nanmax(self.ele_c[active_eles])
 
             inc = (y_max - y_min) * 0.001
             print('ymin, ymax: ', y_min, y_max)
@@ -712,14 +719,13 @@ class FEMPlot(object):
                     self.p_items[mat][bi].setData(ele_x_coords, ele_y_coords, pen=pen, connect=cons.flatten())
                 else:
                     self.p_items[mat][bi].setData([], [])
-
-        elex = self.x[self.i][self.ele2node_tags[self.max_inds[self.i]] - 1]
-        eley = self.y[self.i][self.ele2node_tags[self.max_inds[self.i]] - 1]
-
-        self.p_items['max'].setData(np.insert(elex, len(elex), elex[0]), np.insert(eley, len(eley), eley[0]), connect='all')
-        elex = self.x[self.i][self.ele2node_tags[self.min_inds[self.i]] - 1]
-        eley = self.y[self.i][self.ele2node_tags[self.min_inds[self.i]] - 1]
-        self.p_items['min'].setData(np.insert(elex, len(elex), elex[0]), np.insert(eley, len(eley), eley[0]), connect='all')
+        if self.show_maxmin:
+            elex = self.x[self.i][self.ele2node_tags[self.max_inds[self.i]] - 1]
+            eley = self.y[self.i][self.ele2node_tags[self.max_inds[self.i]] - 1]
+            self.p_items['max'].setData(np.insert(elex, len(elex), elex[0]), np.insert(eley, len(eley), eley[0]), connect='all')
+            elex = self.x[self.i][self.ele2node_tags[self.min_inds[self.i]] - 1]
+            eley = self.y[self.i][self.ele2node_tags[self.min_inds[self.i]] - 1]
+            self.p_items['min'].setData(np.insert(elex, len(elex), elex[0]), np.insert(eley, len(eley), eley[0]), connect='all')
 
         self.plotItem.setTitle(f"Time: {self.time[self.i]:.4g}s")
         self.i = self.i + 1
@@ -731,15 +737,19 @@ def get_app_and_window():
     return app, FEMWindow()
 
 
-def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700, y_sf=1, y_extra=2):
+def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700, y_sf=1, y_extra=2, mirrored=0):
     win = pg.plot()
     img_height = max(tds.y_surf) + tds.height
     img_width = tds.width
     sf = min([max_px_width / img_width, max_px_height / img_height])
-    win.setGeometry(100, 100, tds.width * sf, int(max(tds.y_surf) + tds.height) * sf * y_sf)
-    win.setWindowTitle(title)
-    win.setXRange(0, tds.width)
+    if mirrored:
+        win.setGeometry(100, 100, tds.width * sf / 2, int(max(tds.y_surf) + tds.height) * sf * y_sf)
+        win.setXRange(tds.width / 2 - 5, tds.width)
+    else:
+        win.setGeometry(100, 100, tds.width * sf, int(max(tds.y_surf) + tds.height) * sf * y_sf)
+        win.setXRange(0, tds.width)
     win.setYRange(-tds.height, max(tds.y_surf) + y_extra)
+    win.setWindowTitle(title)
     return win
 
 
@@ -775,8 +785,45 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b', xshift=0):
         y = [fcy - fd.depth, fcy - fd.depth, fcy - fd.depth + fd.height, fcy - fd.depth + fd.height, fcy - fd.depth]
         win.plot(x-xshift, y, pen=c2)
 
+def plot_two_d_system_layers(tds, win=None, c2='w', cs='b', xshift=0):
+    if win is None:
+        win = pg.plot()
+    # import sfsimodels as sm
+    # assert isinstance(tds, sm.TwoDSystem)
+    y_sps_surf = np.interp(tds.x_sps, tds.x_surf, tds.y_surf)
+    # win.plot(tds.x_surf - xshift, tds.y_surf, pen=c2)
+    for i in range(len(tds.sps)):
+        x0 = tds.x_sps[i]
+        if i == len(tds.sps) - 1:
+            x1 = tds.width
+        else:
+            x1 = tds.x_sps[i + 1]
+        xs = np.array([x0, x1])
+        x_angles = list(tds.sps[i].x_angles)
+        sp = tds.sps[i]
+        for ll in range(1, sp.n_layers + 1):
+            if x_angles[ll - 1] is not None:
+                ys = y_sps_surf[i] - sp.layer_depth(ll) + x_angles[ll - 1] * (xs - x0)
+                win.plot(xs - xshift, ys, pen=cs)
+        # win.plot([x0-xshift, x0-xshift], [y_sps_surf[i], -tds.height], pen=c2)
+    # win.plot([-xshift, -xshift], [-tds.height, tds.y_surf[0]], pen=c2)
+    # win.plot([tds.width-xshift, tds.width-xshift], [-tds.height, tds.y_surf[-1]], pen=c2)
+    # win.plot([0-xshift, tds.width-xshift], [-tds.height, -tds.height], pen=c2)
+    for i, bd in enumerate(tds.bds):
+        fd = bd.fd
+        fcx = tds.x_bds[i] + bd.x_fd
+        fcy = np.interp(fcx, tds.x_surf, tds.y_surf)
+        print(fcx, fcy)
+        x = np.array([fcx - fd.width / 2, fcx + fd.width / 2, fcx + fd.width / 2, fcx - fd.width / 2, fcx - fd.width / 2])
+        y = [fcy - fd.depth, fcy - fd.depth, fcy - fd.depth + fd.height, fcy - fd.depth + fd.height, fcy - fd.depth]
+        win.plot(x-xshift, y, pen=c2)
 
 def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=255, pw=0.7, copts=None,
+                                      ):
+    return plot_finite_element_mesh_onto_plot(win.plotItem, femesh, win=win, ele_c=ele_c, label=label, alpha=alpha, pw=pw, copts=copts)
+
+
+def plot_finite_element_mesh_onto_plot(plotItem, femesh, win=None, ele_c=None, label='', alpha=255, pw=0.7, copts=None,
                                       ):
     """
     Plots a finite element mesh object
@@ -801,6 +848,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
     white_mid = copts.setdefault('white_mid', False)
     crange = copts.setdefault('crange', None)
     palpha = copts.setdefault('palpha', 80)
+    pen_col = copts.setdefault('pen_col', None)
     leg_pen = copts.setdefault('leg_pen', 'w')
 
     x_all = femesh.x_nodes
@@ -883,7 +931,10 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
         if sl_ind < 0:
             pen = pg.mkPen([200, 200, 200, 10], width=pw)
         else:
-            pen = pg.mkPen([200, 200, 200, palpha], width=pw)
+            if pen_col is None:
+                pen = pg.mkPen([200, 200, 200, palpha], width=pw)
+            else:
+                pen = pg.mkPen(pen_col, width=pw)
             if ele_c is not None:
 
                 if len(ele_c.shape) == 3:  # colors directly specified
@@ -899,8 +950,8 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
                     brushes = np.array(brush_list)[ele_bis[sl_ind]]
                 eles_x_coords = xc[ed[sl_ind][0]]
                 eles_y_coords = yc[ed[sl_ind][1]]
-                item = color_grid.ColorGrid(eles_x_coords, eles_y_coords, brushes)
-                win.plotItem.addItem(item)
+                item = color_grid.ColorGrid(eles_x_coords, eles_y_coords, brushes, pen_col=pen_col)
+                plotItem.addItem(item)
             else:
                 ed[sl_ind][0] = np.array(ed[sl_ind][0]).flatten()
                 ed[sl_ind][1] = np.array(ed[sl_ind][1]).flatten()
@@ -912,7 +963,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
                 # ele_x_coords = xc[ed[sl_ind][1]]
                 ele_y_coords = yc[ed[sl_ind][1]]
                 ele_connects = np.array([1, 1, 1, 1, 0] * int(len(ed[sl_ind][0]) / 5))
-                win.plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
+                plotItem.plot(ele_x_coords, ele_y_coords, pen=pen,
                                   connect=ele_connects, fillLevel='enclosed',
                                   fillBrush=brush)
 
@@ -924,7 +975,7 @@ def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=2
         leg_copts = {
             'leg_pen': leg_pen
         }
-        o3ptools.add_color_bar(win, win.plotItem, lut, vmin=y_min, vmax=y_max,
+        o3ptools.add_color_bar(win, plotItem, lut, vmin=y_min, vmax=y_max,
                                label=label, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
 
     return win.plotItem
@@ -996,9 +1047,9 @@ def plot_node_arrows(femesh, win, x_offs, y_offs, active_only=1, pen='g'):
     #                   connect=node_connects)
 
 
-def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True):
+def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True, title=''):
     if win is None:
-        win = FEMWindow()
+        win = FEMWindow(title=title)
         win.resize(800, 600)
     plot_finite_element_mesh_onto_win(win, femesh, ele_c=ele_c)
     if start:
@@ -1025,7 +1076,7 @@ def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, copts=None):
     win.start()
 
 
-def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0):
+def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0, title=''):
     # if o3res.coords is None:
     # o3res.load_from_cache()
 
@@ -1035,7 +1086,7 @@ def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0):
             new_ele2node[ele_id - ele_num_base] = o3res.ele2node_tags[ele_id]
         o3res.ele2node_tags = new_ele2node
 
-    win = FEMWindow()
+    win = FEMWindow(title=title)
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
@@ -1101,6 +1152,14 @@ def save(win, ffp, width=1000):
     exp = pg.exporters.ImageExporter(win.plotItem)
     exp.params['width'] = width
     exp.export(ffp)
+
+
+def get_win_size(item):
+
+    if isinstance(item, pg.GraphicsScene):
+        return item.getViewWidget().rect()
+    else:
+        return item.mapRectToDevice(item.boundingRect())
 
 
 def revamp_legend(leg):
