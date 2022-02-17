@@ -104,7 +104,7 @@ class FEMGUI(QtGui.QWidget):
         self.qt_connections()
 
         self.win = pg.PlotWidget()
-        self.win.i_limit = 1e10
+        # self.win.
 
         self.mainLayout.addWidget(self.win, 1, 0)
         self.generate_col_box()
@@ -134,6 +134,9 @@ class FEMGUI(QtGui.QWidget):
             self.copts_eles['4-all'][pm] = {'label': pm}
             for item in defualt_copts:
                 self.copts_eles['4-all'][pm][item] = defualt_copts[item]
+
+
+
 
     def init_model(self, coords, ele2node_tags=None):
         self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
@@ -173,7 +176,7 @@ class FEMGUI(QtGui.QWidget):
 
     def on_step10_forward_clicked(self):
         print('step forward clicked')
-        self.fem_plot.i = min(self.fem_plot.i + 9, self.win.i_limit)
+        self.fem_plot.i = min(self.fem_plot.i + 9, self.fem_plot.i_limit)
         self.fem_plot.updater()
 
     def on_step10_backward_clicked(self):
@@ -335,6 +338,7 @@ class FEMPlot(object):
         self.ele_x_coords = {}
         self.ele_y_coords = {}
         self.ele_connects = {}
+        self.i_limit = 1e10
         # self._mat2ele = bidict({})
         self._mat2ele = {}
         self.show_nodes = 1
@@ -493,7 +497,7 @@ class FEMPlot(object):
             self.y += self.y_coords
 
         self.time = np.arange(len(self.x)) * dt
-        self.win.i_limit = len(self.x) - 1
+        self.i_limit = len(self.x) - 1
 
         # Prepare node colors
         if self.node_c is not None:
@@ -654,7 +658,8 @@ class FEMPlot(object):
 
         if self.i == len(self.time) - 1:
             if not self.timer.isActive():
-                self.timer = 0  # allow looping if using stepper.
+                self.timer.stop()
+                # self.timer = 0  # allow looping if using stepper.
             else:
                 self.timer.stop()
             return
@@ -1062,11 +1067,12 @@ def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, copts=None):
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
+    win.o3res = o3res
     if hasattr(o3res, 'ele_dict'):
         win.add_ele_dict(o3res.ele_dict)
     win.fem_plot.show_nodes = show_nodes
     win.init_model(o3res.coords, o3res.ele2node_tags)
-    win.o3res = o3res
+
     win.xmag = xmag
     win.ymag = ymag
     win.t_scale = t_scale

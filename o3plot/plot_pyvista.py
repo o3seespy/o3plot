@@ -22,7 +22,7 @@ def plot_regular_3dgrid(xs, ys, zs, active=None):
                                  ts[i][j][k + 1], ts[i + 1][j][k + 1], ts[i + 1][j + 1][k + 1], ts[i][j + 1][k + 1],
                                  ]
                 all_ele_node_tags.append(ele_node_tags)
-    plot_eles3d(all_ele_node_tags, xn, yn, zn)
+    return plot_eles3d(all_ele_node_tags, xn, yn, zn)
 
 
 def plot_eles3d(all_ele_node_tags, xn, yn, zn):
@@ -38,8 +38,13 @@ def plot_eles3d(all_ele_node_tags, xn, yn, zn):
     cells_hex = np.arange(len(points)).reshape((-1, 8))
     grid = pv.UnstructuredGrid({pv._vtk.VTK_HEXAHEDRON: cells_hex}, points)
 
+    plotter = pv.Plotter()
+    plotter.add_mesh(grid, show_edges=True)
+    plotter.show_bounds(grid='front', location='outer', all_edges=True)
+    return plotter
+
     # plot the grid (and suppress the camera position output)
-    _ = grid.plot(show_edges=True)
+    # _ = grid.plot(show_edges=True)
 
 
 def run_example():
