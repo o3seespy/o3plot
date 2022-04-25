@@ -4,7 +4,7 @@ import pyvista as pv
 # set_plot_theme('document')
 
 
-def plot_regular_3dgrid(xs, ys, zs, active=None):
+def plot_regular_3dgrid(xs, ys, zs, active=None, c=None, plotter=None):
     if active is None:
         active = np.ones((len(xs)-1, len(ys)-1, len(zs)-1))
     xn = (xs[:, np.newaxis, np.newaxis] * np.ones((len(xs), len(ys), len(zs)))).flatten()
@@ -22,10 +22,10 @@ def plot_regular_3dgrid(xs, ys, zs, active=None):
                                  ts[i][j][k + 1], ts[i + 1][j][k + 1], ts[i + 1][j + 1][k + 1], ts[i][j + 1][k + 1],
                                  ]
                 all_ele_node_tags.append(ele_node_tags)
-    return plot_eles3d(all_ele_node_tags, xn, yn, zn)
+    return plot_eles3d(all_ele_node_tags, xn, yn, zn, c=c, plotter=plotter)
 
 
-def plot_eles3d(all_ele_node_tags, xn, yn, zn):
+def plot_eles3d(all_ele_node_tags, xn, yn, zn, c=None, plotter=None):
     all_ele_verts = []
     for ele_node_tags in all_ele_node_tags:
         ele_verts = []
@@ -37,9 +37,9 @@ def plot_eles3d(all_ele_node_tags, xn, yn, zn):
     points = np.array(all_ele_verts).reshape((-1, 3))
     cells_hex = np.arange(len(points)).reshape((-1, 8))
     grid = pv.UnstructuredGrid({pv._vtk.VTK_HEXAHEDRON: cells_hex}, points)
-
-    plotter = pv.Plotter()
-    plotter.add_mesh(grid, show_edges=True)
+    if plotter is None:
+        plotter = pv.Plotter()
+    plotter.add_mesh(grid, show_edges=True, color=c)
     plotter.show_bounds(grid='front', location='outer', all_edges=True)
     return plotter
 

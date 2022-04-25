@@ -277,12 +277,16 @@ class FEMGUI(QtGui.QWidget):
         self.change_ele_c()
 
     def change_crange(self):
-        val = self.cmin.text()
+        val = self.cmin.text()  # should this be text()
         if val != '' or val is not None:
             self.copts_eles['4-all'][self.curr_pm]['crange'][0] = float(val)
+        else:
+            self.copts_eles['4-all'][self.curr_pm]['crange'][0] = None
         val = self.cmax.text()
         if val != '' or val is not None:
             self.copts_eles['4-all'][self.curr_pm]['crange'][1] = float(val)
+        else:
+            self.copts_eles['4-all'][self.curr_pm]['crange'][1] = None
         self.change_ele_c()
 
 
