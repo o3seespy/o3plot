@@ -1,15 +1,18 @@
 
 
-def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal=0, copts=None):
+def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal=0, copts=None, cb_coords=None):
+
     import numpy as np
     import pyqtgraph as pg
     from PyQt5 import QtWidgets
+    from pyqtgraph import QtCore, QtGui
     # Create a viewbox to hold image item
     col_scale_vb = pg.ViewBox(enableMenu=False, border=None)
     col_scale_vb.disableAutoRange(pg.ViewBox.XYAxes)
     col_scale_vb.setMouseEnabled(x=False, y=False)
     col_scale_vb.setMinimumWidth(10)
     col_scale_vb.setMaximumWidth(20)
+    # col_scale_vb.setBackgroundColor((220, 220, 220, 80))  # no affect
     win.addItem(col_scale_vb)  # Was addItem
     if copts is None:
         copts = {}
@@ -24,6 +27,7 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
     color_scale_image_item = pg.ImageItem(img)
     color_scale_image_item.setLookupTable(lut)
     color_scale_image_item.setLevels([vmin, vmax])
+    # col_scale_vb.setPen(leg_pen)
 
     col_scale_vb.addItem(color_scale_image_item)
     col_scale_vb.setZValue(101)
@@ -35,12 +39,14 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
     axis_item.setRange(vmin, vmax)
     if units != '':
         label += f' [{units}]'
-    axis_item.setLabel(text=label, units='')
+    labelStyle = {'color': leg_pen, 'font-size': '10pt'}
+    axis_item.setLabel(text=label, units='', **labelStyle)
     axis_item.setZValue(101)
     # axis_item.textWidth = 8
     axis_item.enableAutoSIPrefix(False)  # TODO: should be a copts
     
-    axis_item.setPen(leg_pen)
+    # axis_item.setPen(leg_pen)
+    axis_item.setTextPen(leg_pen)
     axis_item.setStyle(autoExpandTextSpace=True, tickLength=3)
     if bal:
         axis_item.setTicks([[(vmin, f'{vmin: .3g}'), (0, '0'), (vmax, f'{vmax: .3g}')]])
@@ -51,9 +57,22 @@ def add_color_bar(win, view, lut, vmin, vmax, label='', n_cols=10, units='', bal
 
     main_layout = QtWidgets.QGraphicsGridLayout()
     pg_wid = pg.GraphicsWidget(parent=view)
+    # p = QtGui.QPainter()
+    # p.setBrush(pg.mkBrush('w'))
+    # pg_wid.paint(p, QtGui.QStyleOptionGraphicsItem())
     # geom = view.getGeometry()
     pg_wid.setLayout(main_layout)
-    pg_wid.setGeometry(50, 5, 220, 50)
+
+    if cb_coords is None:
+        cb_coords = [10, 10]
+    else:
+        cb_coords = list(cb_coords)
+    if cb_coords[0] < 0:
+        cb_coords[0] = view.size().width() + cb_coords[0]
+    if cb_coords[1] < 0:
+        cb_coords[1] = view.size().height() + cb_coords[1]
+    print('cb_coords: ', cb_coords)
+    pg_wid.setGeometry(cb_coords[0], cb_coords[1], 220, 50)
     # view.addItem(pg_wid)
     main_layout.setContentsMargins(10, 10, 10, 0)
     main_layout.setSpacing(0)

@@ -485,6 +485,7 @@ class FEMPlot(object):
 
         leg_pen = self.copts.setdefault('leg_pen', 'w')
         cscheme = self.copts.setdefault('scheme', 'red2yellow')
+        self.color_scheme = cscheme
         cbal = self.copts.setdefault('bal', 0)
         cunits = self.copts.setdefault('units', '')
         clabel = self.copts.setdefault('label', 'vals')
@@ -828,12 +829,13 @@ def plot_two_d_system_layers(tds, win=None, c2='w', cs='b', xshift=0):
         win.plot(x-xshift, y, pen=c2)
 
 def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=255, pw=0.7, copts=None,
-                                      ):
-    return plot_finite_element_mesh_onto_plot(win.plotItem, femesh, win=win, ele_c=ele_c, label=label, alpha=alpha, pw=pw, copts=copts)
+                                      cb_coords=None):
+    return plot_finite_element_mesh_onto_plot(win.plotItem, femesh, win=win, ele_c=ele_c, label=label, alpha=alpha, pw=pw, copts=copts,
+                                              cb_coords=cb_coords)
 
 
 def plot_finite_element_mesh_onto_plot(plotItem, femesh, win=None, ele_c=None, label='', alpha=255, pw=0.7, copts=None,
-                                      ):
+                                      cb_coords=None):
     """
     Plots a finite element mesh object
 
@@ -985,9 +987,10 @@ def plot_finite_element_mesh_onto_plot(plotItem, femesh, win=None, ele_c=None, l
             'leg_pen': leg_pen
         }
         o3ptools.add_color_bar(win, plotItem, lut, vmin=y_min, vmax=y_max,
-                               label=label, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts)
+                               label=label, n_cols=ecol, units=cunits, bal=cbal, copts=leg_copts,
+                               cb_coords=cb_coords)
 
-    return win.plotItem
+    return plotItem
 
 
 def plot_node_disps(femesh, win, x_disps, y_disps, active_only=1):
@@ -1086,9 +1089,12 @@ def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, copts=None):
     win.start()
 
 
-def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0, title=''):
+def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0, title='',
+           copts=None, win_size=(880, 550)):
     # if o3res.coords is None:
     # o3res.load_from_cache()
+    if copts is None:
+        copts = {}
 
     if ele_num_base:
         new_ele2node = {}
@@ -1097,9 +1103,11 @@ def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0, title
         o3res.ele2node_tags = new_ele2node
 
     win = FEMWindow(title=title)
-    win.resize(800, 600)
+    win.resize(*win_size)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
+    for item in copts:
+        win.fem_plot.copts[item] = copts[item]
     win.fem_plot.show_nodes = show_nodes
     win.init_model(o3res.coords, o3res.ele2node_tags)
 
