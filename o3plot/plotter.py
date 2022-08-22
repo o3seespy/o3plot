@@ -142,8 +142,12 @@ class FEMGUI(QtGui.QWidget):
         self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
 
     def plot_dynamic(self, node_c=None, ele_c=None):
+        if hasattr(self.o3res, 'time'):
+            time = self.o3res.time
+        else:
+            time = None
         self.fem_plot.plot_dynamic(self.o3res.x_disp, self.o3res.y_disp, self.o3res.dt, xmag=self.xmag,
-                                   ymag=self.ymag, node_c=node_c, ele_c=ele_c, t_scale=self.t_scale)
+                                   ymag=self.ymag, node_c=node_c, ele_c=ele_c, t_scale=self.t_scale, time=time)
 
     def start(self):
         if not self.started:
@@ -292,6 +296,7 @@ class FEMGUI(QtGui.QWidget):
 
 class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_csv(ffp, engine='c')
     started = 0
+    record_folder = None
 
     def __init__(self, parent=None, title=''):
         self.app = QtWidgets.QApplication([])
@@ -309,9 +314,9 @@ class FEMWindow(pg.GraphicsWindow):  # TODO: consider switching to pandas.read_c
     def init_model(self, coords, ele2node_tags=None):
         self.fem_plot.init_model(coords, ele2node_tags=ele2node_tags)
 
-    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1, ele_num_base=0):
+    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1, ele_num_base=0, time=None):
         self.fem_plot.plot_dynamic(x, y, dt, xmag=xmag, ymag=ymag, node_c=node_c, ele_c=ele_c, t_scale=t_scale,
-                                   ele_num_base=ele_num_base)
+                                   ele_num_base=ele_num_base, time=time)
 
     def start(self):
         if not self.started:
@@ -481,7 +486,7 @@ class FEMPlot(object):
         self.win.autoRange(padding=0.05)  # TODO: depends on xmag
         self.win.disableAutoRange()
 
-    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1, ele_num_base=0):
+    def plot_dynamic(self, x, y, dt, xmag=10.0, ymag=10.0, node_c=None, ele_c=None, t_scale=1, ele_num_base=0, time=None):
 
         leg_pen = self.copts.setdefault('leg_pen', 'w')
         cscheme = self.copts.setdefault('scheme', 'red2yellow')
@@ -501,7 +506,10 @@ class FEMPlot(object):
             self.x += self.x_coords
             self.y += self.y_coords
 
-        self.time = np.arange(len(self.x)) * dt
+        if time is None:
+            self.time = np.arange(len(self.x)) * dt
+        else:
+            self.time = time
         self.i_limit = len(self.x) - 1
 
         # Prepare node colors
@@ -739,6 +747,9 @@ class FEMPlot(object):
 
         self.plotItem.setTitle(f"Time: {self.time[self.i]:.4g}s")
         self.i = self.i + 1
+        if self.record_folder:
+            exp = pg.exporters.ImageExporter(self.plotItem)
+            exp.export(f'{self.record_folder}/f{self.i}.png')
 
 
 def get_app_and_window():
@@ -1090,7 +1101,7 @@ def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, copts=None):
 
 
 def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0, title='',
-           copts=None, win_size=(880, 550)):
+           copts=None, win_size=(880, 550), record_folder=None):
     # if o3res.coords is None:
     # o3res.load_from_cache()
     if copts is None:
@@ -1104,6 +1115,7 @@ def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0, title
 
     win = FEMWindow(title=title)
     win.resize(*win_size)
+    win.fem_plot.record_folder = record_folder
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
     for item in copts:
@@ -1111,9 +1123,14 @@ def replot(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, ele_num_base=0, title
     win.fem_plot.show_nodes = show_nodes
     win.init_model(o3res.coords, o3res.ele2node_tags)
 
+    if hasattr(o3res, 'time'):
+        time = o3res.time
+    else:
+        time = None
+    print('time: ', time)
     if o3res.dynamic:
         win.plot_dynamic(o3res.x_disp, o3res.y_disp, node_c=o3res.node_c, ele_c=o3res.ele_c, dt=o3res.dt, xmag=xmag,
-                         ymag=ymag, t_scale=t_scale)
+                         ymag=ymag, t_scale=t_scale, time=time)
     win.start()
 
 

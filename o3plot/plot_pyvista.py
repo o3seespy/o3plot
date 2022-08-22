@@ -4,6 +4,10 @@ import pyvista as pv
 # set_plot_theme('document')
 
 
+def get_plotter():
+    return pv.Plotter()
+
+
 def plot_regular_3dgrid(xs, ys, zs, active=None, c=None, plotter=None):
     if active is None:
         active = np.ones((len(xs)-1, len(ys)-1, len(zs)-1))
@@ -46,7 +50,6 @@ def plot_eles3d(all_ele_node_tags, xn, yn, zn, c=None, plotter=None):
     # plot the grid (and suppress the camera position output)
     # _ = grid.plot(show_edges=True)
 
-
 def run_example():
     nnx = 3
     nny = 5
@@ -58,10 +61,13 @@ def run_example():
     aeles[0][0][0] = 0
     aeles[-1][0][0] = 0
     aeles[0][2][-1] = 0
-    plot_regular_3dgrid(xs, ys, zs, aeles)
+    plotter = plot_regular_3dgrid(xs, ys, zs, aeles)
+    plotter.show()
+    plotter.clear()
 
 if __name__ == '__main__':
     run_example()
+
 
 
 
