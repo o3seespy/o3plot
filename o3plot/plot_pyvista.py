@@ -8,7 +8,7 @@ def get_plotter():
     return pv.Plotter()
 
 
-def plot_regular_3dgrid(xs, ys, zs, active=None, c=None, plotter=None):
+def plot_regular_3dgrid(xs, ys, zs, active=None, c=None, plotter=None, opacity=1):
     if active is None:
         active = np.ones((len(xs)-1, len(ys)-1, len(zs)-1))
     xn = (xs[:, np.newaxis, np.newaxis] * np.ones((len(xs), len(ys), len(zs)))).flatten()
@@ -26,10 +26,10 @@ def plot_regular_3dgrid(xs, ys, zs, active=None, c=None, plotter=None):
                                  ts[i][j][k + 1], ts[i + 1][j][k + 1], ts[i + 1][j + 1][k + 1], ts[i][j + 1][k + 1],
                                  ]
                 all_ele_node_tags.append(ele_node_tags)
-    return plot_eles3d(all_ele_node_tags, xn, yn, zn, c=c, plotter=plotter)
+    return plot_eles3d(all_ele_node_tags, xn, yn, zn, c=c, plotter=plotter, opacity=opacity)
 
 
-def plot_eles3d(all_ele_node_tags, xn, yn, zn, c=None, plotter=None):
+def plot_eles3d(all_ele_node_tags, xn, yn, zn, c=None, plotter=None, opacity=1):
     all_ele_verts = []
     for ele_node_tags in all_ele_node_tags:
         ele_verts = []
@@ -43,8 +43,8 @@ def plot_eles3d(all_ele_node_tags, xn, yn, zn, c=None, plotter=None):
     grid = pv.UnstructuredGrid({pv._vtk.VTK_HEXAHEDRON: cells_hex}, points)
     if plotter is None:
         plotter = pv.Plotter()
-    plotter.add_mesh(grid, show_edges=True, color=c)
-    plotter.show_bounds(grid='front', location='outer', all_edges=True)
+    plotter.add_mesh(grid, show_edges=True, color=c, opacity=opacity)
+    # plotter.show_bounds(grid='front', location='outer', all_edges=True)
     return plotter
 
     # plot the grid (and suppress the camera position output)

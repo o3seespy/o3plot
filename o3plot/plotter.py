@@ -281,12 +281,18 @@ class FEMGUI(QtGui.QWidget):
         self.change_ele_c()
 
     def change_crange(self):
-        val = self.cmin.text()  # should this be text()
+        try:
+            val = self.cmin.text()  # should this be text()
+        except TypeError:
+            val = self.cmin
         if val != '' or val is not None:
             self.copts_eles['4-all'][self.curr_pm]['crange'][0] = float(val)
         else:
             self.copts_eles['4-all'][self.curr_pm]['crange'][0] = None
-        val = self.cmax.text()
+        try:
+            val = self.cmax.text()
+        except TypeError:
+            val = self.cmax
         if val != '' or val is not None:
             self.copts_eles['4-all'][self.curr_pm]['crange'][1] = float(val)
         else:
@@ -330,6 +336,7 @@ def mouseMoved(event):
 
 class FEMPlot(object):
     selected_nodes = None
+    record_folder = None
 
     def __init__(self, win, timer, copts=None):
         self.plotItem = win
@@ -758,14 +765,14 @@ def get_app_and_window():
     return app, FEMWindow()
 
 
-def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700, y_sf=1, y_extra=2, mirrored=0):
+def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height=700, y_sf=1, y_extra=2, mirrored=0, xshift=0):
     win = pg.plot()
     img_height = max(tds.y_surf) + tds.height
     img_width = tds.width
     sf = min([max_px_width / img_width, max_px_height / img_height])
     if mirrored:
         win.setGeometry(100, 100, tds.width * sf / 2, int(max(tds.y_surf) + tds.height) * sf * y_sf)
-        win.setXRange(tds.width / 2 - 5, tds.width)
+        win.setXRange(tds.width / 2 - 5 + xshift, tds.width + xshift)
     else:
         win.setGeometry(100, 100, tds.width * sf, int(max(tds.y_surf) + tds.height) * sf * y_sf)
         win.setXRange(0, tds.width)
@@ -806,7 +813,7 @@ def plot_two_d_system(tds, win=None, c2='w', cs='b', xshift=0):
         y = [fcy - fd.depth, fcy - fd.depth, fcy - fd.depth + fd.height, fcy - fd.depth + fd.height, fcy - fd.depth]
         win.plot(x-xshift, y, pen=c2)
 
-def plot_two_d_system_layers(tds, win=None, c2='w', cs='b', xshift=0):
+def plot_two_d_system_layers(tds, win=None, c2='w', cs='b', xshift=0, mirrored=0):
     if win is None:
         win = pg.plot()
     # import sfsimodels as sm
@@ -819,13 +826,18 @@ def plot_two_d_system_layers(tds, win=None, c2='w', cs='b', xshift=0):
             x1 = tds.width
         else:
             x1 = tds.x_sps[i + 1]
+        if mirrored:
+            if x1 <= tds.width / 2:
+                continue
+            if x0 < tds.width / 2:
+                x0 = tds.width / 2
         xs = np.array([x0, x1])
         x_angles = list(tds.sps[i].x_angles)
         sp = tds.sps[i]
         for ll in range(1, sp.n_layers + 1):
             if x_angles[ll - 1] is not None:
                 ys = y_sps_surf[i] - sp.layer_depth(ll) + x_angles[ll - 1] * (xs - x0)
-                win.plot(xs - xshift, ys, pen=cs)
+                win.plot(xs + xshift, ys, pen=cs)
         # win.plot([x0-xshift, x0-xshift], [y_sps_surf[i], -tds.height], pen=c2)
     # win.plot([-xshift, -xshift], [-tds.height, tds.y_surf[0]], pen=c2)
     # win.plot([tds.width-xshift, tds.width-xshift], [-tds.height, tds.y_surf[-1]], pen=c2)
@@ -838,6 +850,7 @@ def plot_two_d_system_layers(tds, win=None, c2='w', cs='b', xshift=0):
         x = np.array([fcx - fd.width / 2, fcx + fd.width / 2, fcx + fd.width / 2, fcx - fd.width / 2, fcx - fd.width / 2])
         y = [fcy - fd.depth, fcy - fd.depth, fcy - fd.depth + fd.height, fcy - fd.depth + fd.height, fcy - fd.depth]
         win.plot(x-xshift, y, pen=c2)
+        
 
 def plot_finite_element_mesh_onto_win(win, femesh, ele_c=None, label='', alpha=255, pw=0.7, copts=None,
                                       cb_coords=None):

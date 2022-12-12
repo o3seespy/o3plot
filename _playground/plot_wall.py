@@ -43,7 +43,7 @@ def wall_and_footing():
     wb.floor_width = 10.0
     wb.floor_length = 20.0
     wb.n_walls = 4
-    wb.floor_thickness = 0.3
+    wb.floor_thickness = 0.2
     wb.wall_norm_coords = [(0, 0.2), (0, 0.8), (1, 0.2), (1, 0.8)]
     plotter = o3p.plot_pyvista.get_plotter()
     fd = sm.RaftFoundation(length=3.5, width=1.2, height=0.8, depth=0.6)
@@ -131,7 +131,8 @@ def wall_and_footing():
                     print(xs, ys, zs)
                     o3p.plot_pyvista.plot_regular_3dgrid(xs, ys, zs, plotter=plotter)
 
-
+    plotter.save_graphic('wall.svg')
+    plotter.save_graphic('wall.pdf')
     plotter.show()
     plotter.clear()
 
