@@ -61,10 +61,17 @@ class bidict(dict):  # unused?
         super(bidict, self).__delitem__(key)
 
 
-class FEMGUI(QtGui.QWidget):
+class FEMGUI(QtWidgets.QWidget):
     started = 0
-    def __init__(self, copts=None):
-        self.app = QtGui.QApplication(sys.argv)
+
+    def __init__(self, copts=None, window_title='FEM viewer'):
+        curr_app = QtCore.QCoreApplication.instance()
+        if curr_app is not None:
+            print('App already running')
+            self.started = 1
+            self.app = QtGui.QApplication.instance()
+        else:
+            self.app = QtGui.QApplication(sys.argv)
         super(FEMGUI, self).__init__()
 
         self.o3res = None
@@ -72,7 +79,7 @@ class FEMGUI(QtGui.QWidget):
         self.ymag = 1
         self.t_scale = 1
 
-        self.setWindowTitle('FEM viewer')
+        self.setWindowTitle(window_title)
 
         self.mainLayout = QtGui.QGridLayout()
         # self.mainLayout = QtWidgets.QVBoxLayout()
@@ -134,8 +141,6 @@ class FEMGUI(QtGui.QWidget):
             self.copts_eles['4-all'][pm] = {'label': pm}
             for item in defualt_copts:
                 self.copts_eles['4-all'][pm][item] = defualt_copts[item]
-
-
 
 
     def init_model(self, coords, ele2node_tags=None):
@@ -1093,8 +1098,8 @@ def plot_finite_element_mesh(femesh, win=None, ele_c=None, start=True, title='')
     return win
 
 
-def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, copts=None):
-    win = FEMGUI(copts=copts)
+def plot_2dresults(o3res, xmag=1, ymag=1, t_scale=1, show_nodes=1, copts=None, window_title="FEM"):
+    win = FEMGUI(copts=copts, window_title=window_title)
     win.resize(800, 600)
     if o3res.mat2ele_tags is not None:
         win.mat2ele = o3res.mat2ele_tags
