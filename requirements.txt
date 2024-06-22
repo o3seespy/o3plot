@@ -2,7 +2,7 @@ openseespy
 o3seespy
 numpy
 sfsimodels
-PyQt5
+PyQt5==5.15.6
 pyqtgraph
 bwplot
 
