@@ -508,15 +508,15 @@ class FEMPlot(object):
         clabel = self.copts.setdefault('label', 'vals')
         crange = self.copts.setdefault('crange', None)
 
-        self.timer.setInterval(1000. * dt * t_scale)  # in milliseconds
+        self.timer.setInterval(int(1000. * dt * t_scale))  # in milliseconds
         self.timer.start()
         self.node_c = node_c
         self.ele_c = ele_c
         self.x = np.array(x) * xmag
         self.y = np.array(y) * ymag
         if self.x_coords is not None:
-            self.x += self.x_coords
-            self.y += self.y_coords
+            self.x = self.x + self.x_coords[:, np.newaxis]
+            self.y = self.y + self.y_coords[:, np.newaxis]
 
         if time is None:
             self.time = np.arange(len(self.x)) * dt
@@ -742,8 +742,11 @@ class FEMPlot(object):
                     cons1 = self.ele_connects[mat]
                     cons = self.ele_connects[mat][inds]
                     # ele_x_coords1 = self.x[self.i][(self.mat2node_tags[mat] - 1)]
-                    ele_x_coords = self.x[self.i][(self.mat2node_tags[mat][inds] - 1)]
-                    ele_y_coords = (self.y[self.i])[(self.mat2node_tags[mat][inds] - 1)]
+
+                    ele_x_coords = self.x[:, self.i][(self.mat2node_tags[mat][inds] - 1)]
+                    ele_y_coords = (self.y[:, self.i])[(self.mat2node_tags[mat][inds] - 1)]
+                    # ele_x_coords = self.x[self.i][(self.mat2node_tags[mat][inds] - 1)]  # this was the old approach but not compatible with current o3
+                    # ele_y_coords = (self.y[self.i])[(self.mat2node_tags[mat][inds] - 1)]
                     ele_x_coords = np.insert(ele_x_coords, len(ele_x_coords[0]), ele_x_coords[:, 0], axis=1).flatten()
                     ele_y_coords = np.insert(ele_y_coords, len(ele_y_coords[0]), ele_y_coords[:, 0], axis=1).flatten()
                     self.p_items[mat][bi].setData(ele_x_coords, ele_y_coords, pen=pen, connect=cons.flatten())
@@ -779,7 +782,7 @@ def create_scaled_window_for_tds(tds, title='', max_px_width=1000, max_px_height
         win.setGeometry(100, 100, tds.width * sf / 2, int(max(tds.y_surf) + tds.height) * sf * y_sf)
         win.setXRange(tds.width / 2 - 5 + xshift, tds.width + xshift)
     else:
-        win.setGeometry(100, 100, tds.width * sf, int(max(tds.y_surf) + tds.height) * sf * y_sf)
+        win.setGeometry(100, 100, int(tds.width * sf), int(max(tds.y_surf) + tds.height * sf * y_sf))
         win.setXRange(0, tds.width)
     win.setYRange(-tds.height, max(tds.y_surf) + y_extra)
     win.setWindowTitle(title)
